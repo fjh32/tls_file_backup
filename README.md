@@ -2,7 +2,7 @@
 USE mkcert utility to generate certs and add ca root to trusted roots of system
 
 # How certs and client-validation of certs works
-certificate authority (CA) signs a certificate (Csa) with its own CRT (CaCrt), producing End entity cert Ce
+certificate authority (CA) signs a certificate (Csa) with its own CRT (CaCrt), producing End entity cert Ce.
 Server hosting the TLS app (Sa) gets Csa & its own private key Ksa signed by CA and receives Ce.
 Sa uses Ce and Ksa as its TLS encryption credentials.
 
@@ -25,4 +25,9 @@ openssl ec -in server-private-key.pem -pubout -out server-public-key.pem
 
 openssl req -new -x509 -sha256 -key server-private-key.pem -subj "/CN=duckduckgo.com" -out server-certificate.pem
 
+
+# status
+[x] TLS connection between client and server (w/ trusted CA on client explained above)
+[x] Streaming messages between client and server
+[ ] Cleanup and abstract
 
