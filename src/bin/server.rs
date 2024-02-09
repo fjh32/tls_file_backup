@@ -5,7 +5,7 @@ use std::io::BufReader;
 use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
 use std::path::Path;
-use file_backup_service::connection::Connection;
+use file_backup_service::connection::ClientConnection;
 use rustls_pemfile::ec_private_keys;
 use rustls_pemfile::{certs, rsa_private_keys, pkcs8_private_keys};
 use rustls::ServerConfig;
@@ -82,32 +82,49 @@ async fn main() -> io::Result<()> {
 
 async fn handle_client(sock: TcpStream, peer_addr: SocketAddr, tls_acceptor: TlsAcceptor) -> Result<(), Box<dyn Error>>{
         // handshake to establish encrypted connection
-        let mut tls_stream = match tls_acceptor.accept(sock).await {
+        let tls_stream = match tls_acceptor.accept(sock).await {
             Ok(tls_stream) => tls_stream,
             Err(_err) => { println!("ERROR HANDLING CLIENT {}", _err); return Err(Box::new(_err)); } // return early if accept fails, nothing to do
         };
 
         println!("Connected via TLS to {}", peer_addr);
 
-        let dst = String::new();
-        // let mut buf:Vec<u8> = Vec::with_capacity(4096);
-        let mut buf = [0;4096];
-        // let n = tls_stream.read_buf(&mut buf).await?;
-        let n = tls_stream.read(&mut buf).await?;
-        println!("Read {} bytes from client", n);
-        // tls_stream.read(&mut buf).await?;
-        // tls_stream.read_to_string(&mut dst).await?;
+        let mut server_conn = file_backup_service::connection::ServerConnection::new(tls_stream);
+
+        let mut string = match server_conn.read_message_into_string().await {
+            Ok(string) => string,
+            Err(_) => {
+                panic!("failed read to server")
+            }
+        };
+
+        println!("Received this message from client: {}", string);
+        string.push_str(" Addendum from server");
+
+        match server_conn.write_message_from_string(string).await {
+            Ok(_) => (),
+            Err(_) => {
+                panic!("failed read to server")
+            }
+        };
+
+        server_conn.shutdown_tls_conn().await?;
+
+        // let dst = String::new();
+        // // let mut buf:Vec<u8> = Vec::with_capacity(4096);
+        // let mut buf = [0;4096];
+        // // let n = tls_stream.read_buf(&mut buf).await?;
+        // let n = tls_stream.read(&mut buf).await?;
+        // println!("Read {} bytes from client", n);
+        // // tls_stream.read(&mut buf).await?;
+        // // tls_stream.read_to_string(&mut dst).await?;
         
-        let string = String::from_utf8(buf.to_vec())?;
-        println!("Received msg: {}", string);
+        // let string = String::from_utf8(buf.to_vec())?;
+        // println!("Received msg: {}", string);
 
-        tls_stream.write_all(string.as_bytes()).await?;
-        tls_stream.shutdown().await?;
+        // tls_stream.write_all(string.as_bytes()).await?;
+        // tls_stream.shutdown().await?;
 
-        // echo server for now
-        // let (mut reader, mut writer) = split(tls_stream);
-        // let n = copy(&mut reader, &mut writer).await?;
-        // writer.flush().await?;
-        // println!("Echo: {} - {}", peer_addr, n);
+
         Ok(())
 }

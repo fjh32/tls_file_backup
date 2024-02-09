@@ -28,6 +28,9 @@ openssl req -new -x509 -sha256 -key server-private-key.pem -subj "/CN=duckduckgo
 
 # status
 [x] TLS connection between client and server (w/ trusted CA on client explained above)
+
 [x] Streaming messages between client and server
+
 [ ] Cleanup and abstract
 
+[ ] JSON configs

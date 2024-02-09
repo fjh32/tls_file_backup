@@ -15,6 +15,7 @@ use tokio_rustls::client::TlsStream;
 use rustls::client::danger::{ServerCertVerifier, ServerCertVerified};
 
 use file_backup_service::common;
+use file_backup_service::connection;
 
 
 const HOST_ADDR: &str = "127.0.0.1:4545";
@@ -96,32 +97,33 @@ async fn main() -> io::Result<()> {
         }
     };
 
-    let msg = String::from("HI SERVER FROM CLIENT");
 
-    let (mut reader, mut writer) = split(tls_stream);
-    writer.write_all(msg.as_bytes()).await?;
-    
-    writer.flush().await?;
-    println!("heree");
-    let mut dst = String::new();
-    reader.read_to_string(&mut dst).await?;
-    println!("RECEIVED FROM SERVER: {}",dst);
-    // reader.shutdown().await?;
-    // let mut dst = String::new();
-    // tls_stream.read_to_string(&mut dst).await?;
-    // let (mut stdin, mut stdout) = (tokio_stdin(), tokio_stdout());
+    let mut conn = file_backup_service::connection::ClientConnection::new(tls_stream);
+    match conn.write_message_from_string(String::from("HELLO SERVER FROM CLIENTv2")).await {
+        Ok(_) => println!("sending msg to server"),
+        Err(_) => {
+            panic!("failed msg to server")
+        }
+    };
+
+    let string = match conn.read_message_into_string().await {
+        Ok(string) => string,
+        Err(_) => {
+            panic!("failed read to server")
+        }
+    };
+
+    println!("Received this from server: {}", string);
+
+    // let msg = String::from("HI SERVER FROM CLIENT");
     // let (mut reader, mut writer) = split(tls_stream);
-
-    // tokio::select! {
-    //     ret = copy(&mut reader, &mut stdout) => {
-    //         ret?;
-    //     },
-    //     ret = copy(&mut stdin, &mut writer) => {
-    //         ret?;
-    //         writer.shutdown().await?
-    //     }
-    // }
-
+    // writer.write_all(msg.as_bytes()).await?;
+    
+    // writer.flush().await?;
+    // println!("heree");
+    // let mut dst = String::new();
+    // reader.read_to_string(&mut dst).await?;
+    // println!("RECEIVED FROM SERVER: {}",dst);
     println!("ENDED");
     Ok(())
 }
