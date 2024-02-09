@@ -13,7 +13,7 @@ Now, when a client initiates a connection to Sa, and Sa presents Ce, client trus
 
 
 ## Old notes
-### \
+### 
 `openssl req -new -newkey rsa:4096 -x509 -sha256 -days 365 -nodes -out cert.crt -keyout priv.key`
 put priv.key and cert.crt in a directory at the top level of this repo named certs/
 

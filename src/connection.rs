@@ -61,11 +61,6 @@ impl ClientConnection {
         }
     }
 
-    // pub fn close(&self) -> Result<(), Box<dyn Error>> {
-    //     self.tls_reader.close();
-    //     Ok(())
-    // }
-
     pub async fn read_message_into_string(&mut self) -> Result<String, Box<dyn Error>> {
         let data = self.read_message_into_vec().await?;
         let string = String::from_utf8(data)?;

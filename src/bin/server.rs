@@ -109,22 +109,6 @@ async fn handle_client(sock: TcpStream, peer_addr: SocketAddr, tls_acceptor: Tls
         };
 
         server_conn.shutdown_tls_conn().await?;
-
-        // let dst = String::new();
-        // // let mut buf:Vec<u8> = Vec::with_capacity(4096);
-        // let mut buf = [0;4096];
-        // // let n = tls_stream.read_buf(&mut buf).await?;
-        // let n = tls_stream.read(&mut buf).await?;
-        // println!("Read {} bytes from client", n);
-        // // tls_stream.read(&mut buf).await?;
-        // // tls_stream.read_to_string(&mut dst).await?;
         
-        // let string = String::from_utf8(buf.to_vec())?;
-        // println!("Received msg: {}", string);
-
-        // tls_stream.write_all(string.as_bytes()).await?;
-        // tls_stream.shutdown().await?;
-
-
         Ok(())
 }
