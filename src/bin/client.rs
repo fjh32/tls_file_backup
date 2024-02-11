@@ -25,34 +25,6 @@ const HOST_IP: &str = "192.168.1.110";
 const CERT: &str = "/home/frank/certs/ripplein.space-dev.pem";
 
 
-
-// const KEY: &str = "certs/key.pem";
-
-
-
-
-// struct SkipServerVerification;
-
-// impl SkipServerVerification {
-//     fn new() -> Arc<Self> {
-//         Arc::new(Self)
-//     }
-// }
-
-// impl ServerCertVerifier for SkipServerVerification {
-//     fn verify_server_cert(
-//         &self,
-//         end_entity: &CertificateDer<'_>,
-//         intermediates: &[CertificateDer<'_>],
-//         server_name: &ServerName<'_>,
-//         ocsp_response: &[u8],
-//         now: UnixTime
-//     ) -> Result<ServerCertVerified, rustls::Error> {
-//         Ok(ServerCertVerified::assertion())
-//     }
-// }
-
-
 #[tokio::main]
 async fn main() -> io::Result<()> {
     let addr = HOST_ADDR
@@ -96,15 +68,17 @@ async fn main() -> io::Result<()> {
     };
 
 
-    let mut conn = file_backup_service::connection::ClientConnection::new(tls_stream);
-    match conn.write_message_from_string(String::from("HELLO SERVER FROM CLIENTv2")).await {
+    // let mut conn = file_backup_service::connection::ClientConnection::new(tls_stream);
+
+
+    match file_backup_service::connection::write_message_from_string(&mut tls_stream, String::from("HELLO SERVER FROM CLIENTv2")).await {
         Ok(_) => println!("sending msg to server"),
         Err(_) => {
             panic!("failed msg to server")
         }
     };
 
-    let string = match conn.read_message_into_string().await {
+    let string = match file_backup_service::connection::read_into_string(&mut tls_stream).await {
         Ok(string) => string,
         Err(_) => {
             panic!("failed read to server")

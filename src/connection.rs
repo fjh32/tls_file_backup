@@ -1,90 +1,53 @@
-use tokio::io::{split,  AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf};
+use tokio::io::{split, AsyncRead, AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf};
 use tokio::net::TcpStream;
-use tokio_rustls::client::TlsStream;
+use tokio_rustls::TlsStream;
 use std::error::Error;
 use std::fs::File;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
 
-const MAX_FRAME_SIZE: u32 = 2048;
+pub async fn read_into_vec<R>(read_stream:&mut R) -> Result<Vec<u8>, Box<dyn Error>>
+where
+    R: AsyncRead + Unpin{
 
-// do enum instead with ClientConnection and ServerConnection
-
-#[derive(Debug)]
-pub struct ClientConnection {
-    pub tls_reader: ReadHalf<TlsStream<TcpStream>>,
-    pub tls_writer: WriteHalf<TlsStream<TcpStream>>
+    let mut buf:Vec<u8> = Vec::new();
+    let n = read_stream.read_buf(&mut buf).await?;
+    Ok(buf)
 }
 
-#[derive(Debug)]
-pub struct ServerConnection {
-    pub tls_stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>
-}
+pub async fn read_into_string<R>(read_stream:&mut R) -> Result<String, Box<dyn Error>>
+where
+    R: AsyncRead + Unpin{
 
-impl ServerConnection {
-    pub fn new(tls_stream: tokio_rustls::server::TlsStream<TcpStream>) -> ServerConnection {
-        ServerConnection { tls_stream: tls_stream }
-    }
-
-    pub async fn shutdown_tls_conn(&mut self) -> Result<(), Box<dyn Error>> {
-        self.tls_stream.shutdown().await?;
-        Ok(())
-    }
-    
-    pub async fn read_message_into_string(&mut self) -> Result<String, Box<dyn Error>> {
-        let data = self.read_message_into_vec().await?;
+        let data = read_into_vec(read_stream).await?;
         let string = String::from_utf8(data)?;
         Ok(string)
-    }
 
-    pub async fn read_message_into_vec(&mut self) -> Result<Vec<u8>, Box<dyn Error>> {
-        let mut buf:Vec<u8> = Vec::new();
-        let n = self.tls_stream.read_buf(&mut buf).await?;
-        Ok(buf)
-    }
-
-    pub async fn write_message_from_string(&mut self, data: String ) -> Result<(), Box<dyn Error>> {
-        self.tls_stream.write_all(data.as_bytes()).await?;
-        self.tls_stream.flush().await?;
-        Ok(())
-    }
 }
 
-impl ClientConnection {
-    pub fn new(tls_stream: TlsStream<TcpStream>) -> ClientConnection {
-        // if I need any other info, like connection cipher, get now
-        let (reader, writer) = split(tls_stream);
-        ClientConnection {
-            tls_reader: reader,
-            tls_writer: writer
-        }
-    }
+pub async fn write_message_from_string<W>(write_stream: &mut W, data: String ) -> Result<(), Box<dyn Error>> 
+where
+    W: AsyncWriteExt + Unpin {
+    write_stream.write_all(data.as_bytes()).await?;
+    write_stream.flush().await?;
+    Ok(())
+}
 
-    pub async fn read_message_into_string(&mut self) -> Result<String, Box<dyn Error>> {
-        let data = self.read_message_into_vec().await?;
-        let string = String::from_utf8(data)?;
-        Ok(string)
-    }
+pub async fn shutdown_tls_conn<W>(write_stream: &mut W) -> Result<(), Box<dyn Error>> 
+where
+    W: AsyncWriteExt + Unpin {
+    write_stream.shutdown().await?;
+    Ok(())
+}
 
-    pub async fn read_message_into_vec(&mut self) -> Result<Vec<u8>, Box<dyn Error>> {
-        let mut buf:Vec<u8> = Vec::new();
-        let n = self.tls_reader.read_buf(&mut buf).await?;
-        Ok(buf)
-    }
+pub fn read_into_file<R>(read_stream: &mut R, filename: File) -> Result<Vec<u8>, Box<dyn Error>>
+where
+    R: AsyncRead + Unpin{
+    let mut ret_bytes = Vec::new();
 
-    pub async fn write_message_from_string(&mut self, data: String ) -> Result<(), Box<dyn Error>> {
-        self.tls_writer.write_all(data.as_bytes()).await?;
-        self.tls_writer.flush().await?;
-        Ok(())
-    }
+    let mut buf: [u8;4096] = [0;4096];
+    // use read_stream.read(&[u8])
 
-    pub fn read_into_file(&self, filename: File) -> Result<Vec<u8>, Box<dyn Error>>{
-        let mut ret_bytes = Vec::new();
-
-        let mut buf: [u8;4096] = [0;4096];
-
-
-        Ok( ret_bytes)
-    }
+    Ok( ret_bytes)
 }

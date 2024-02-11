@@ -5,7 +5,6 @@ use std::io::BufReader;
 use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
 use std::path::Path;
-use file_backup_service::connection::ClientConnection;
 use rustls_pemfile::ec_private_keys;
 use rustls_pemfile::{certs, rsa_private_keys, pkcs8_private_keys};
 use rustls::ServerConfig;
@@ -82,16 +81,16 @@ async fn main() -> io::Result<()> {
 
 async fn handle_client(sock: TcpStream, peer_addr: SocketAddr, tls_acceptor: TlsAcceptor) -> Result<(), Box<dyn Error>>{
         // handshake to establish encrypted connection
-        let tls_stream = match tls_acceptor.accept(sock).await {
+        let mut tls_stream = match tls_acceptor.accept(sock).await {
             Ok(tls_stream) => tls_stream,
             Err(_err) => { println!("ERROR HANDLING CLIENT {}", _err); return Err(Box::new(_err)); } // return early if accept fails, nothing to do
         };
 
         println!("Connected via TLS to {}", peer_addr);
 
-        let mut server_conn = file_backup_service::connection::ServerConnection::new(tls_stream);
+        // let mut server_conn = file_backup_service::connection::ServerConnection::new(tls_stream);
 
-        let mut string = match server_conn.read_message_into_string().await {
+        let mut string = match file_backup_service::connection::read_into_string(&mut tls_stream).await {
             Ok(string) => string,
             Err(_) => {
                 panic!("failed read to server")
@@ -101,14 +100,14 @@ async fn handle_client(sock: TcpStream, peer_addr: SocketAddr, tls_acceptor: Tls
         println!("Received this message from client: {}", string);
         string.push_str(" Addendum from server");
 
-        match server_conn.write_message_from_string(string).await {
+        match file_backup_service::connection::write_message_from_string(&mut tls_stream, string).await {
             Ok(_) => (),
             Err(_) => {
                 panic!("failed read to server")
             }
         };
 
-        server_conn.shutdown_tls_conn().await?;
+        file_backup_service::connection::shutdown_tls_conn(&mut tls_stream,).await?;
         
         Ok(())
 }
