@@ -14,6 +14,7 @@ use tokio_rustls::TlsConnector;
 use tokio_rustls::client::TlsStream;
 use rustls::client::danger::{ServerCertVerifier, ServerCertVerified};
 
+
 use file_backup_service::common;
 use file_backup_service::connection;
 
@@ -27,6 +28,7 @@ const CERT: &str = "/home/frank/certs/ripplein.space-dev.pem";
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
+    file_backup_service::common::setup_logger();
     let addr = HOST_ADDR
         .to_string()
         .to_socket_addrs()?
@@ -59,7 +61,7 @@ async fn main() -> io::Result<()> {
     let tls_connector = TlsConnector::from(Arc::new(config));
     let sock_stream = TcpStream::connect(&addr).await?;
     let ip_addr = ServerName::try_from(HOST_IP).unwrap();
-    let mut tls_stream = match tls_connector.connect(ip_addr, sock_stream).await {
+    let tls_stream = match tls_connector.connect(ip_addr, sock_stream).await {
         Ok(tls) => tls,
         Err(_e) => {
             println!("{}", _e);
@@ -68,17 +70,17 @@ async fn main() -> io::Result<()> {
     };
 
 
-    // let mut conn = file_backup_service::connection::ClientConnection::new(tls_stream);
+    let mut conn = file_backup_service::connection::Connection::new(tls_stream);
 
 
-    match file_backup_service::connection::write_message_from_string(&mut tls_stream, String::from("HELLO SERVER FROM CLIENTv2")).await {
+    match conn.write_message_from_string(String::from("HELLO SERVER FROM CLIENTv2")).await {
         Ok(_) => println!("sending msg to server"),
         Err(_) => {
             panic!("failed msg to server")
         }
     };
 
-    let string = match file_backup_service::connection::read_into_string(&mut tls_stream).await {
+    let string = match conn.read_into_string().await {
         Ok(string) => string,
         Err(_) => {
             panic!("failed read to server")
@@ -86,6 +88,16 @@ async fn main() -> io::Result<()> {
     };
 
     println!("Received this from server: {}", string);
+
+    // let filename = String::from("./test_files/test.server.txt");
+    let filename = String::from("./test_files/bin_file");
+
+    match conn.write_from_file(filename).await {
+        Ok(_) => println!("sending file to server"),
+        Err(_) => {
+            panic!("failed msg to server")
+        }
+    }
 
     println!("ENDED");
     Ok(())

@@ -15,6 +15,8 @@ use tokio_rustls::rustls::pki_types::CertificateDer;
 use tokio_rustls::rustls::pki_types::PrivateKeyDer;
 use tokio_rustls::TlsAcceptor;
 use std::sync::Arc;
+use env_logger::Env;
+use log::{debug, error, log_enabled, info, Level};
 
 use file_backup_service::common;
 use file_backup_service::connection;
@@ -26,20 +28,29 @@ const MY_ADDR: &str = "0.0.0.0:4545";
 const CERT: &str = "/home/frank/certs/ripplein.space-dev.pem";
 const KEY: &str = "/home/frank/certs/ripplein.space-dev-key.pem";
 
+
+
+
+
 // curl --cacert certs/new/server-certificate.pem https://ripplein.space:4545/ --resolve ripplein.space:4545:127.0.0.1
-fn load_certs(path: &Path) -> io::Result<Vec<CertificateDer<'static>>> {
-    certs(&mut BufReader::new(File::open(path)?)).collect()
+fn load_certs(filename: &str) -> io::Result<Vec<CertificateDer<'static>>> {
+    let file = File::open(&Path::new(filename))?;
+    certs(&mut BufReader::new(file)).collect()
 }
 
-fn load_keys(path: &Path) -> io::Result<PrivateKeyDer<'static>> {
-    pkcs8_private_keys(&mut BufReader::new(File::open(path)?))
+// pkcs keys
+fn load_keys(filename: &str) -> io::Result<PrivateKeyDer<'static>> {
+    let file = File::open(&Path::new(filename))?;
+    pkcs8_private_keys(&mut BufReader::new(file))
         .next()
         .unwrap()
         .map(Into::into)
 }
 
-fn load_ec_keys(path: &Path) -> io::Result<PrivateKeyDer<'static>> {
-    ec_private_keys(&mut BufReader::new(File::open(path)?))
+// elliptic curve keys
+fn load_ec_keys(filename: &str) -> io::Result<PrivateKeyDer<'static>> {
+    let file = File::open(&Path::new(filename))?;
+    ec_private_keys(&mut BufReader::new(file))
         .next()
         .unwrap()
         .map(Into::into)
@@ -47,14 +58,16 @@ fn load_ec_keys(path: &Path) -> io::Result<PrivateKeyDer<'static>> {
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
+    file_backup_service::common::setup_logger();
+
     let addr = MY_ADDR
         .to_string()
         .to_socket_addrs()?
         .next()
         .ok_or_else(|| io::Error::from(io::ErrorKind::AddrNotAvailable))?;
 
-    let certs = load_certs(&Path::new(CERT))?;
-    let key = load_keys(&Path::new(KEY))?;
+    let certs = load_certs(CERT)?;
+    let key = load_keys(KEY)?;
 
     let config = rustls::ServerConfig::builder()
         .with_no_client_auth()
@@ -70,7 +83,7 @@ async fn main() -> io::Result<()> {
 
         tokio::spawn(async move {
             if let Err(err) = handle_client(socket, peer_addr, tlsacceptor_ptr).await {
-                eprintln!("{:?}", err);
+                error!("{:?}", err);
             };
         });
     }
@@ -81,33 +94,44 @@ async fn main() -> io::Result<()> {
 
 async fn handle_client(sock: TcpStream, peer_addr: SocketAddr, tls_acceptor: TlsAcceptor) -> Result<(), Box<dyn Error>>{
         // handshake to establish encrypted connection
-        let mut tls_stream = match tls_acceptor.accept(sock).await {
+        let tls_stream = match tls_acceptor.accept(sock).await {
             Ok(tls_stream) => tls_stream,
-            Err(_err) => { println!("ERROR HANDLING CLIENT {}", _err); return Err(Box::new(_err)); } // return early if accept fails, nothing to do
+            Err(_err) => { error!("ERROR HANDLING CLIENT {}", _err); return Err(Box::new(_err)); } // return early if accept fails, nothing to do
         };
 
-        println!("Connected via TLS to {}", peer_addr);
+        info!("Connected via TLS to {}", peer_addr);
 
         // let mut server_conn = file_backup_service::connection::ServerConnection::new(tls_stream);
+        let mut conn = file_backup_service::connection::Connection::new(tls_stream);
 
-        let mut string = match file_backup_service::connection::read_into_string(&mut tls_stream).await {
+
+        let mut string = match conn.read_into_string().await {
             Ok(string) => string,
             Err(_) => {
                 panic!("failed read to server")
             }
         };
 
-        println!("Received this message from client: {}", string);
+        info!("Received this message from client: {}", string);
         string.push_str(" Addendum from server");
 
-        match file_backup_service::connection::write_message_from_string(&mut tls_stream, string).await {
+        match conn.write_message_from_string(string).await {
             Ok(_) => (),
             Err(_) => {
                 panic!("failed read to server")
             }
         };
 
-        file_backup_service::connection::shutdown_tls_conn(&mut tls_stream,).await?;
-        
+
+        // let filename = String::from("./test_files/test.server.txt");
+        let filename = String::from("./test_files/bin_file_server");
+
+        match conn.read_to_file(filename).await {
+            Ok(_) => info!("received file msg"),
+            Err(_) => {
+                panic!("failed msg to server")
+            }
+        }
+
         Ok(())
 }
