@@ -48,7 +48,9 @@ Create garbage test file: `dd if=/dev/urandom of=random.img count=1024 bs=1M` or
     - file output format, eg append <datetime> to filename
     - server: overwrite existing y/n? Keep x amount of copies?
 
-[ ] Logging
+[ ] tar.gz client input if directory
+
+[-] Logging
     - timing of file transfers
 
 [ ] Client "basic auth"
@@ -56,7 +58,7 @@ Create garbage test file: `dd if=/dev/urandom of=random.img count=1024 bs=1M` or
 
 [ ] Custom Errors
 
-[ ] Command line args
+[X] Command line args
     - client input file
 
-[ ] tar.gz client input if directory
+

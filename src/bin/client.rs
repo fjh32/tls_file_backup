@@ -1,35 +1,42 @@
-use std::fs::File;
-use std::io::{self, Read};
-use std::io::BufReader;
+use std::io;
 use std::net::{IpAddr, ToSocketAddrs};
-use std::path::PathBuf;
-use std::str::FromStr;
+use std::path::Path;
 use std::sync::Arc;
 use rustls::pki_types::{CertificateDer, UnixTime};
 use tokio_rustls::rustls::pki_types::ServerName;
 use tokio_rustls::rustls::{ClientConfig, RootCertStore};
-use tokio::io::{copy, split, stdin as tokio_stdin, stdout as tokio_stdout, AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
-use tokio_rustls::client::TlsStream;
-use rustls::client::danger::{ServerCertVerifier, ServerCertVerified};
+use log::{debug, error, log_enabled, info, Level};
+use clap::Parser;
+use std::fs::metadata;
 
 
 use file_backup_service::common;
 use file_backup_service::connection;
 
 
-// const HOST_ADDR: &str = "127.0.0.1:4545";
-// const HOST_IP: &str = "127.0.0.1";
-const HOST_ADDR: &str = "192.168.1.110:4545";
-const HOST_IP: &str = "192.168.1.110";
-const CERT: &str = "/home/frank/certs/ripplein.space-dev.pem";
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct ClientArgs {
+    #[arg(short, long, default_value = "ripplein.space")]
+    ip: String,
+    #[arg(short, long, default_value_t = 4545)]
+    port: i32,
+    #[arg(short, long)]
+    file: String,
+}
 
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    file_backup_service::common::setup_logger();
-    let addr = HOST_ADDR
+    common::setup_logger();
+
+    let args = ClientArgs::parse();
+    let host = common::make_address_str(&args.ip, &args.port);
+    info!("Connecting to {}", host);
+
+    let addr = host
         .to_string()
         .to_socket_addrs()?
         .next()
@@ -38,12 +45,12 @@ async fn main() -> io::Result<()> {
     
     let mut root_cert_store = rustls::RootCertStore::empty();
     for cert in rustls_native_certs::load_native_certs().expect("could not load platform certs") {
-        // println!("Got a cert");
         root_cert_store.add(cert).unwrap();
     }
 
 
     // USE this to include CA crt file with which to accept anyone's cert the CA has signed
+    // very useful to distribute client with CA cert
     // println!("OPENING CERT FILE {}", CERT);
     // let mut pem = BufReader::new(File::open(CERT)?);
     // for cert in rustls_pemfile::certs(&mut pem) {
@@ -55,30 +62,22 @@ async fn main() -> io::Result<()> {
     //     root_cert_store.add(cert).unwrap();
     // }
 
+    let ip_addr = ServerName::try_from(args.ip).unwrap();
     let config = rustls::ClientConfig::builder()
         .with_root_certificates(root_cert_store)
         .with_no_client_auth();
     let tls_connector = TlsConnector::from(Arc::new(config));
+
     let sock_stream = TcpStream::connect(&addr).await?;
-    let ip_addr = ServerName::try_from(HOST_IP).unwrap();
-    let tls_stream = match tls_connector.connect(ip_addr, sock_stream).await {
-        Ok(tls) => tls,
-        Err(_e) => {
-            println!("{}", _e);
-            panic!("FAILED TO CONNECT") 
-        }
-    };
+    let tls_stream = tls_connector.connect(ip_addr, sock_stream).await?;
+    let mut conn = connection::Connection::new(tls_stream);
+    info!("TLS connection established with {}", host);
 
 
-    let mut conn = file_backup_service::connection::Connection::new(tls_stream);
-
-
-    match conn.write_message_from_string(String::from("HELLO SERVER FROM CLIENTv2")).await {
-        Ok(_) => println!("sending msg to server"),
-        Err(_) => {
-            panic!("failed msg to server")
-        }
-    };
+    // let filepath = Path::new(&args.file);
+    // let filename = filepath.file_name().
+    // let filename_message_to_send = format!("filename:{}:filename", args.file);
+    conn.write_message_from_string(filename_message_to_send).await?;
 
     let string = match conn.read_into_string().await {
         Ok(string) => string,
@@ -87,18 +86,15 @@ async fn main() -> io::Result<()> {
         }
     };
 
-    println!("Received this from server: {}", string);
+    info!("Received this from server: {}", string);
 
-    // let filename = String::from("./test_files/test.server.txt");
-    let filename = String::from("./test_files/bin_file");
-
-    match conn.write_from_file(filename).await {
-        Ok(_) => println!("sending file to server"),
+    match conn.write_from_file(args.file).await {
+        Ok(_) => info!("sending file to server"),
         Err(_) => {
             panic!("failed msg to server")
         }
     }
 
-    println!("ENDED");
+    info!("ENDED");
     Ok(())
 }
