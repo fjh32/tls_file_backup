@@ -1,15 +1,15 @@
+use std::fs::File;
 use std::io;
-use std::net::{IpAddr, ToSocketAddrs};
-use std::path::Path;
+use std::io::BufReader;
+use std::net::ToSocketAddrs;
 use std::sync::Arc;
-use rustls::pki_types::{CertificateDer, UnixTime};
+use std::time::Instant;
+use rustls::RootCertStore;
 use tokio_rustls::rustls::pki_types::ServerName;
-use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
-use log::{debug, error, log_enabled, info, Level};
+use log::{ error, info};
 use clap::Parser;
-use std::fs::metadata;
 
 
 use file_backup_service::common;
@@ -34,8 +34,13 @@ async fn main() -> io::Result<()> {
 
     let args = ClientArgs::parse();
     let host = common::make_address_str(&args.ip, &args.port);
-    info!("Connecting to {}", host);
 
+    info!("Compressing {}", args.file);
+    let start = Instant::now();
+    let (abs_compressed_filepath,compressed_file_to_send) = common::compress(args.file)?;
+    info!("Took {:?} to compress", start.elapsed());
+
+    info!("Connecting to {}", host);
     let addr = host
         .to_string()
         .to_socket_addrs()?
@@ -47,20 +52,7 @@ async fn main() -> io::Result<()> {
     for cert in rustls_native_certs::load_native_certs().expect("could not load platform certs") {
         root_cert_store.add(cert).unwrap();
     }
-
-
-    // USE this to include CA crt file with which to accept anyone's cert the CA has signed
-    // very useful to distribute client with CA cert
-    // println!("OPENING CERT FILE {}", CERT);
-    // let mut pem = BufReader::new(File::open(CERT)?);
-    // for cert in rustls_pemfile::certs(&mut pem) {
-    //     let cert = match cert {
-    //         Ok(cert) => {println!("Got a cert"); cert },
-    //         Err(_) => {println!("Err occurred "); break; }
-    //     };
-
-    //     root_cert_store.add(cert).unwrap();
-    // }
+    root_cert_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
 
     let ip_addr = ServerName::try_from(args.ip).unwrap();
     let config = rustls::ClientConfig::builder()
@@ -72,29 +64,39 @@ async fn main() -> io::Result<()> {
     let tls_stream = tls_connector.connect(ip_addr, sock_stream).await?;
     let mut conn = connection::Connection::new(tls_stream);
     info!("TLS connection established with {}", host);
+    
 
-
-    // let filepath = Path::new(&args.file);
-    // let filename = filepath.file_name().
-    // let filename_message_to_send = format!("filename:{}:filename", args.file);
+    let filename_message_to_send = format!("filename:{}:filename", compressed_file_to_send);
     conn.write_message_from_string(filename_message_to_send).await?;
 
-    let string = match conn.read_into_string().await {
-        Ok(string) => string,
-        Err(_) => {
-            panic!("failed read to server")
-        }
-    };
-
-    info!("Received this from server: {}", string);
-
-    match conn.write_from_file(args.file).await {
-        Ok(_) => info!("sending file to server"),
-        Err(_) => {
-            panic!("failed msg to server")
-        }
+    let server_response = conn.read_into_string().await?;
+    if server_response != "OK" {
+        let msg = format!("Server sent a bad response to our file request. Aborting...");
+        error!("{}", msg);
+        panic!("{}", msg);
     }
 
-    info!("ENDED");
+    info!("Received ok from server. Sending {}", abs_compressed_filepath);
+    conn.write_from_file(abs_compressed_filepath.clone()).await?;
+    std::fs::remove_file(abs_compressed_filepath)?;
+    info!("Client done. Exiting.");
+    Ok(())
+}
+
+
+fn _add_certfile_to_root_store(roots:&mut RootCertStore, certfile: String) -> Result<(),io::Error>{
+        // USE this to include CA crt file with which to accept anyone's cert the CA has signed
+    // very useful to distribute client with CA cert
+    println!("OPENING CERT FILE {}", certfile);
+    let mut pem = BufReader::new(File::open(certfile)?);
+    for cert in rustls_pemfile::certs(&mut pem) {
+        let cert = match cert {
+            Ok(cert) => {println!("Got a cert"); cert },
+            Err(_) => {println!("Err occurred "); break; }
+        };
+
+        roots.add(cert).unwrap();
+    }
+
     Ok(())
 }

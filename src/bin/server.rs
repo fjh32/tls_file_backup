@@ -1,24 +1,20 @@
-use std::error::Error;
 use std::fs::File;
 use std::io;
 use std::io::BufReader;
 use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
 use std::path::Path;
+use chrono::DateTime;
 use rustls_pemfile::ec_private_keys;
-use rustls_pemfile::{certs, rsa_private_keys, pkcs8_private_keys};
-use rustls::ServerConfig;
-use tokio::io::AsyncReadExt;
-use tokio::io::{copy, sink, split, AsyncWriteExt};
+use rustls_pemfile::{certs, pkcs8_private_keys};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::rustls::pki_types::CertificateDer;
 use tokio_rustls::rustls::pki_types::PrivateKeyDer;
 use tokio_rustls::TlsAcceptor;
 use std::sync::Arc;
-use env_logger::Env;
-use log::{debug, error, log_enabled, info, Level};
-use std::time::Instant;
+use log::{ error, info};
 use clap::Parser;
+use chrono::{Datelike, Timelike, Local};
 
 use file_backup_service::common;
 use file_backup_service::connection;
@@ -40,7 +36,7 @@ fn load_keys(filename: &String) -> io::Result<PrivateKeyDer<'static>> {
 }
 
 /// elliptic curve keys
-fn load_ec_keys(filename: &str) -> io::Result<PrivateKeyDer<'static>> {
+fn _load_ec_keys(filename: &str) -> io::Result<PrivateKeyDer<'static>> {
     let file = File::open(&Path::new(filename))?;
     ec_private_keys(&mut BufReader::new(file))
         .next()
@@ -72,7 +68,7 @@ async fn main() -> io::Result<()> {
     let args = ServerArgs::parse();
 
     let my_addr_str = common::make_address_str(&args.ip, &args.port);
-    info!("Server running on {}", my_addr_str);
+    info!("Server running on {}. Writing incoming files to {}", my_addr_str, args.write_dir);
     
 
     let addr = my_addr_str
@@ -106,25 +102,33 @@ async fn main() -> io::Result<()> {
         });
     }
 
-    Ok(())
 }
 
 
 async fn handle_client(sock: TcpStream, peer_addr: SocketAddr, tls_acceptor: TlsAcceptor, server_args: Arc<ServerArgs>) -> Result<(), io::Error> {
 
         let tls_stream = tls_acceptor.accept(sock).await?;
-
         let mut conn = connection::Connection::new(tls_stream);
         info!("Connected via TLS to {}", peer_addr);
 
-        let filename_to_write = common::verify_filename(conn.read_into_string().await?)?;
-        info!("Client wants to send us this file: {}", filename_to_write);
+        // Sequential message passing with client
+        let mut filename_to_write = common::verify_filename(conn.read_into_string().await?)?;
+        info!("{} wants to send us this file: {}", peer_addr, filename_to_write);
+        filename_to_write = format_filename(&peer_addr.ip().to_string(), &filename_to_write);
 
         conn.write_message_from_string(String::from("OK")).await?;
 
         let mut absfilepath = server_args.write_dir.clone();
         absfilepath.push_str(&filename_to_write);
+        info!("Reading data from {} into {}", peer_addr, absfilepath);
         conn.read_to_file(absfilepath).await?;
 
+        info!("{} file transfer complete. Connection closed.", peer_addr);
         Ok(())
+}
+
+fn format_filename(ip: &String, filename: &String) -> String {
+    let now: DateTime<Local> = Local::now();
+    let datetimestr = format!("{:02}{:02}{}_{}{}{}", now.month(), now.day(), now.year(), now.hour(), now.minute(), now.second());
+    format!("{}__{}__{}", datetimestr, ip, filename)
 }

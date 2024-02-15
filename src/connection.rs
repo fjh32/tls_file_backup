@@ -1,13 +1,10 @@
-use tokio::io::{split, AsyncRead, AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf};
-use tokio::net::TcpStream;
-use tokio_rustls::TlsStream;
-use std::error::Error;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use std::fs::File;
 use std::io::Write;
 use std::io;
-use std::{path::Path, io::{Read, BufReader}};
+use std::io::Read;
 use std::fs::OpenOptions;
-use log::{debug, error, log_enabled, info, Level};
+use log::info;
 use std::time::Instant;
 
 const BUFFER_SIZE: usize = 1024 * 15; // 15KB
@@ -56,7 +53,7 @@ impl<IO:AsyncRead + AsyncWriteExt + Unpin> Connection<IO> {
 
     /// Read from file, write to self.stream.
     pub async fn write_from_file(&mut self, filename: String) -> Result<usize, io::Error> {
-        let mut file = File::open(filename)?;
+        let mut file = File::open(&filename)?;
 
         let mut buf: [u8;BUFFER_SIZE] = [0;BUFFER_SIZE];
         let start = Instant::now();
@@ -71,7 +68,7 @@ impl<IO:AsyncRead + AsyncWriteExt + Unpin> Connection<IO> {
             self.stream.write(bufdata).await?;
             self.stream.flush().await?;
         }
-        info!("Sending file to server took {:?} seconds", start.elapsed());
+        info!("Sending {} to server took {:?}", filename, start.elapsed());
         Ok(total_bytes)
     }
 
@@ -92,7 +89,7 @@ impl<IO:AsyncRead + AsyncWriteExt + Unpin> Connection<IO> {
             let bufdata = &buf[0..n];
             file.write(bufdata)?;
         }
-        info!("Receiving file from client took {:?} seconds", start.elapsed());
+        info!("Receiving {} from client took {:?}", filename, start.elapsed());
         Ok(total_bytes)
     }
 }
