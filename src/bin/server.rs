@@ -68,7 +68,7 @@ async fn main() -> io::Result<()> {
     let args = ServerArgs::parse();
 
     let my_addr_str = common::make_address_str(&args.ip, &args.port);
-    info!("Server running on {}. Writing incoming files to {}", my_addr_str, args.write_dir);
+    info!("TLS Server running on {}. Writing incoming files to {}", my_addr_str, args.write_dir);
     
 
     let addr = my_addr_str
@@ -129,6 +129,6 @@ async fn handle_client(sock: TcpStream, peer_addr: SocketAddr, tls_acceptor: Tls
 
 fn format_filename(ip: &String, filename: &String) -> String {
     let now: DateTime<Local> = Local::now();
-    let datetimestr = format!("{:02}{:02}{}_{}{}{}", now.month(), now.day(), now.year(), now.hour(), now.minute(), now.second());
+    let datetimestr = format!("{:02}{:02}{:04}_{:02}{:02}{:02}", now.month(), now.day(), now.year(), now.hour(), now.minute(), now.second());
     format!("{}__{}__{}", datetimestr, ip, filename)
 }

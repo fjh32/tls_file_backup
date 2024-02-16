@@ -32,12 +32,14 @@ struct ClientArgs {
 async fn main() -> io::Result<()> {
     common::setup_logger();
 
+    let system_tmp_dir = String::from(std::env::temp_dir().to_str().unwrap_or("/tmp"));
+
     let args = ClientArgs::parse();
     let host = common::make_address_str(&args.ip, &args.port);
 
     info!("Compressing {}", args.file);
     let start = Instant::now();
-    let (abs_compressed_filepath,compressed_file_to_send) = common::compress(args.file)?;
+    let (abs_compressed_filepath,compressed_file_to_send) = common::compress(args.file, system_tmp_dir)?;
     info!("Took {:?} to compress {}", start.elapsed(), abs_compressed_filepath);
     
     info!("Connecting to {}", host);
@@ -84,7 +86,7 @@ async fn main() -> io::Result<()> {
 }
 
 
-fn _add_certfile_to_root_store(roots:&mut RootCertStore, certfile: String) -> Result<(),io::Error>{
+fn _add_cafile_to_root_store(roots:&mut RootCertStore, certfile: String) -> Result<(),io::Error>{
         // USE this to include CA crt file with which to accept anyone's cert the CA has signed
     // very useful to distribute client with CA cert
     println!("OPENING CERT FILE {}", certfile);

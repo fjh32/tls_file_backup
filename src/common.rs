@@ -1,5 +1,6 @@
 use std::path::Path;
 use std::process::Command;
+use chrono::Local;
 use env_logger::Env;
 use std::io::{self, BufReader};
 use regex::Regex;
@@ -7,10 +8,19 @@ use std::fs::{metadata, File};
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use log::debug;
+use std::io::Write;
 use tar;
 
 pub fn setup_logger() {
-    env_logger::Builder::from_env(Env::default().filter_or("RUST_LOG", "info")).init();
+    env_logger::Builder::from_env(Env::default().filter_or("RUST_LOG", "info"))
+    .format(|buf, record| {
+        writeln!(buf,
+            "{} [{}] - {}",
+            Local::now().format("%Y-%m-%dT%H:%M:%S"),
+            record.level(),
+            record.args()
+        )
+    }).init();
 }
 
 pub fn make_address_str(addr: &String, port: &i32) -> String {
@@ -33,8 +43,8 @@ pub fn verify_filename(filename:String) -> Result<String, io::Error> {
     
 }
 
-/// compresses abs_file_or_dirname into ./file_or_dirname.gz if a file or ./file_or_dirname.tar.gz if a dir
-pub fn compress(abs_file_or_dirname: String) -> Result<(String,String), std::io::Error> {
+/// compresses abs_file_or_dirname into system_tmp_dir/file_or_dirname.gz if a file or system_tmp_dir/file_or_dirname.tar.gz if a dir
+pub fn compress(abs_file_or_dirname: String, system_tmp_dir: String) -> Result<(String,String), std::io::Error> {
     let filedata = metadata(&abs_file_or_dirname)?;
     let path = Path::new(&abs_file_or_dirname);
     let basefilename = path.file_name().unwrap().to_str().unwrap();
@@ -43,16 +53,16 @@ pub fn compress(abs_file_or_dirname: String) -> Result<(String,String), std::io:
 
     if filedata.is_dir() {
         let archive_name = format!("{}.tar.gz", basefilename);
-        let _abs_archive_path = format!("{}/{}", &archive_dir, &archive_name);
+        let _abs_archive_path = format!("{}/{}", &system_tmp_dir, &archive_name);
         // compress_dir(&abs_archive_path, &abs_file_or_dirname, &basefilename.to_string())?;
-        compress_dir_shell(&archive_name, &abs_file_or_dirname)?;
-        Ok((archive_name.clone(), archive_name))
+        compress_dir_shell(&_abs_archive_path, &abs_file_or_dirname)?;
+        Ok((_abs_archive_path, archive_name))
     }
     else {
         let archive_name = format!("{}.gz", basefilename);
         let _abs_archive_path = format!("{}/{}", &archive_dir, &archive_name);
-        compress_file(&archive_name, &abs_file_or_dirname)?;
-        Ok((archive_name.clone(), archive_name))
+        compress_file(&_abs_archive_path, &abs_file_or_dirname)?;
+        Ok((_abs_archive_path, archive_name))
     }
 }
 
