@@ -38,8 +38,8 @@ async fn main() -> io::Result<()> {
     info!("Compressing {}", args.file);
     let start = Instant::now();
     let (abs_compressed_filepath,compressed_file_to_send) = common::compress(args.file)?;
-    info!("Took {:?} to compress", start.elapsed());
-
+    info!("Took {:?} to compress {}", start.elapsed(), abs_compressed_filepath);
+    
     info!("Connecting to {}", host);
     let addr = host
         .to_string()

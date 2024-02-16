@@ -1,10 +1,12 @@
 use std::path::Path;
+use std::process::Command;
 use env_logger::Env;
 use std::io::{self, BufReader};
 use regex::Regex;
 use std::fs::{metadata, File};
 use flate2::write::GzEncoder;
 use flate2::Compression;
+use log::debug;
 use tar;
 
 pub fn setup_logger() {
@@ -41,15 +43,16 @@ pub fn compress(abs_file_or_dirname: String) -> Result<(String,String), std::io:
 
     if filedata.is_dir() {
         let archive_name = format!("{}.tar.gz", basefilename);
-        let abs_archive_path = format!("{}/{}", &archive_dir, &archive_name);
-        compress_dir(&abs_archive_path, &abs_file_or_dirname, &basefilename.to_string())?;
-        Ok((abs_archive_path, archive_name))
+        let _abs_archive_path = format!("{}/{}", &archive_dir, &archive_name);
+        // compress_dir(&abs_archive_path, &abs_file_or_dirname, &basefilename.to_string())?;
+        compress_dir_shell(&archive_name, &abs_file_or_dirname)?;
+        Ok((archive_name.clone(), archive_name))
     }
     else {
         let archive_name = format!("{}.gz", basefilename);
-        let abs_archive_path = format!("{}/{}", &archive_dir, &archive_name);
-        compress_file(&abs_archive_path, &abs_file_or_dirname)?;
-        Ok((abs_archive_path, archive_name))
+        let _abs_archive_path = format!("{}/{}", &archive_dir, &archive_name);
+        compress_file(&archive_name, &abs_file_or_dirname)?;
+        Ok((archive_name.clone(), archive_name))
     }
 }
 
@@ -64,15 +67,34 @@ pub fn compress_file(archive_name: &String, absfilename: &String) -> Result<(), 
     Ok(())
 }
 
-pub fn compress_dir(archive_name: &String, absdirname: &String, basefilename: &String) -> Result<(), std::io::Error> {
+pub fn compress_dir_shell(archive_name: &String, absdirname: &String) -> Result<(), std::io::Error> {
+    if cfg!(target_os = "windows") {
+        Command::new("tar")
+            .arg("-zcf")
+            .arg(archive_name)
+            .arg(absdirname)
+            .output()?
+    } else {
+        Command::new("tar")
+            .arg("-zcf")
+            .arg(archive_name)
+            .arg(absdirname)
+            .output()?
+    };
+    Ok(())
+}
+
+fn _compress_dir(archive_name: &String, absdirname: &String, basefilename: &String) -> Result<(), std::io::Error> {
     // let absdirname = absdirname.clone();
     let tar_gz_file_handle = File::create(archive_name)?;
 
     let encoder = GzEncoder::new(tar_gz_file_handle, Compression::default());
     let mut tar = tar::Builder::new(encoder);
 
+    debug!("CREATING TAR {} ::: {}", basefilename, absdirname);
     tar.append_dir_all(&basefilename, absdirname)?;
+    debug!("Wrapping up TAR");
     tar.finish()?;
-
+    debug!("TAR Done");
     Ok(())
 }
