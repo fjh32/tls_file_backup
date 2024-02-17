@@ -96,9 +96,7 @@ fn _add_cafile_to_root_store(roots:&mut RootCertStore, certfile: String) -> Resu
             Ok(cert) => {println!("Got a cert"); cert },
             Err(_) => {println!("Err occurred "); break; }
         };
-
         roots.add(cert).unwrap();
     }
-
     Ok(())
 }

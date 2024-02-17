@@ -39,8 +39,6 @@ pub fn verify_filename(filename:String) -> Result<String, io::Error> {
     else {
         Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid message"))
     }
-
-    
 }
 
 /// compresses abs_file_or_dirname into system_tmp_dir/file_or_dirname.gz if a file or system_tmp_dir/file_or_dirname.tar.gz if a dir
@@ -49,18 +47,15 @@ pub fn compress(abs_file_or_dirname: String, system_tmp_dir: String) -> Result<(
     let path = Path::new(&abs_file_or_dirname);
     let basefilename = path.file_name().unwrap().to_str().unwrap();
 
-    let archive_dir = path.parent().unwrap().to_str().unwrap();
-
     if filedata.is_dir() {
         let archive_name = format!("{}.tar.gz", basefilename);
         let _abs_archive_path = format!("{}/{}", &system_tmp_dir, &archive_name);
-        // compress_dir(&abs_archive_path, &abs_file_or_dirname, &basefilename.to_string())?;
         compress_dir_shell(&_abs_archive_path, &abs_file_or_dirname)?;
         Ok((_abs_archive_path, archive_name))
     }
     else {
         let archive_name = format!("{}.gz", basefilename);
-        let _abs_archive_path = format!("{}/{}", &archive_dir, &archive_name);
+        let _abs_archive_path = format!("{}/{}", &system_tmp_dir, &archive_name);
         compress_file(&_abs_archive_path, &abs_file_or_dirname)?;
         Ok((_abs_archive_path, archive_name))
     }

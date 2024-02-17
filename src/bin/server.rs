@@ -129,6 +129,7 @@ async fn handle_client(sock: TcpStream, peer_addr: SocketAddr, tls_acceptor: Tls
 
 fn format_filename(ip: &String, filename: &String) -> String {
     let now: DateTime<Local> = Local::now();
-    let datetimestr = format!("{:02}{:02}{:04}_{:02}{:02}{:02}", now.month(), now.day(), now.year(), now.hour(), now.minute(), now.second());
+    let datetimestr = format!("{:02}{:02}{:04}_{:02}{:02}{:02}", 
+        now.month(), now.day(), now.year(), now.hour(), now.minute(), now.second());
     format!("{}__{}__{}", datetimestr, ip, filename)
 }

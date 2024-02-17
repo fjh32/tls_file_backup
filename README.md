@@ -5,6 +5,18 @@ but make sure client code works with it using `rustls_native_certs::load_native_
 Client may need the WebPKI native cert authorities (firefox uses them, so im sure they have letencrypt CA).
 
 
+# After you're sure you have working certs;
+# Build
+`cargo build` `cargo build --release` for release builds
+# Running the exes (devel - non release)
+`cargo run --bin server -- --ip "0.0.0.0" --port 4545 --cert "<absolute_path_to_cert_file>" --key "<absolute_path_to_key_file>"`
+`cargo run --bin client -- --ip "<server_ip_hostname_certdomain>" --port 4545 --file <absolute_path_of_file_to_send>`
+
+# Running release builds
+Pass the same params as above to the exes
+
+
+
 # How certs and client-validation of certs works
 certificate authority (CA) signs a certificate (Csa) with its own CRT (CaCrt), producing End entity cert Ce.
 Server hosting the TLS app (Sa) gets Csa & its own private key Ksa signed by CA and receives Ce.
