@@ -6,14 +6,14 @@ Client may need the WebPKI native cert authorities (firefox uses them, so im sur
 
 
 # After you're sure you have working certs;
-# Build
+## Build
 `cargo build` `cargo build --release` for release builds
-# Running the exes (devel - non release)
+## Running the exes (devel - non release)
 `cargo run --bin server -- --ip "0.0.0.0" --port 4545 --cert "<absolute_path_to_cert_file>" --key "<absolute_path_to_key_file>"`
 
 `cargo run --bin client -- --ip "<server_ip_hostname_certdomain>" --port 4545 --file <absolute_path_of_file_to_send>`
 
-# Running release builds
+## Running release builds
 Pass the same params as above to the exes
 
 
@@ -56,20 +56,20 @@ Create garbage test file: `dd if=/dev/urandom of=random.img count=1024 bs=1M` or
 
 [ ] Unit test `file_backup_service::connection::Connection` struct
 
-[ ] JSON configs
-    - server output dir
-    - file output format, eg append <datetime> to filename
-    - server: overwrite existing y/n? Keep x amount of copies?
+[ ] Client: Compress TLS stream buffer in memory (flate2 gzencoder) instead of compressing entire file before sending it<br>
+        - Either way, if directory, you'd have to archive prior to streaming it anyway...
 
-[ ] tar.gz client input if directory
+[ ] SHA file checksum
 
-[-] Logging
+[X] tar.gz client input if directory
+
+[X] Logging
     - timing of file transfers
 
 [ ] Client "basic auth"
     - b/c this is over TLS, it's safe for the client to send a password over the network for the server to verify
 
-[ ] Custom Errors
+[X] Errors
 
 [X] Command line args
     - client input file

@@ -11,7 +11,6 @@ use tokio_rustls::TlsConnector;
 use log::{ error, info};
 use clap::Parser;
 
-
 use file_backup_service::common;
 use file_backup_service::connection;
 
@@ -67,7 +66,6 @@ async fn main() -> io::Result<()> {
     let mut conn = connection::Connection::new(tls_stream);
     info!("TLS connection established with {}", host);
     
-
     let filename_message_to_send = format!("filename:{}:filename", compressed_file_to_send);
     conn.write_message_from_string(filename_message_to_send).await?;
 
@@ -87,7 +85,7 @@ async fn main() -> io::Result<()> {
 
 
 fn _add_cafile_to_root_store(roots:&mut RootCertStore, certfile: String) -> Result<(),io::Error>{
-        // USE this to include CA crt file with which to accept anyone's cert the CA has signed
+    // USE this to include CA crt file with which to accept anyone's cert the CA has signed
     // very useful to distribute client with CA cert
     println!("OPENING CERT FILE {}", certfile);
     let mut pem = BufReader::new(File::open(certfile)?);

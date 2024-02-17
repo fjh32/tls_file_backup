@@ -4,7 +4,6 @@ use std::io::BufReader;
 use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
 use std::path::Path;
-use chrono::DateTime;
 use rustls_pemfile::ec_private_keys;
 use rustls_pemfile::{certs, pkcs8_private_keys};
 use tokio::net::{TcpListener, TcpStream};
@@ -14,7 +13,6 @@ use tokio_rustls::TlsAcceptor;
 use std::sync::Arc;
 use log::{ error, info};
 use clap::Parser;
-use chrono::{Datelike, Timelike, Local};
 
 use file_backup_service::common;
 use file_backup_service::connection;
@@ -114,7 +112,7 @@ async fn handle_client(sock: TcpStream, peer_addr: SocketAddr, tls_acceptor: Tls
         // Sequential message passing with client
         let mut filename_to_write = common::verify_filename(conn.read_into_string().await?)?;
         info!("{} wants to send us this file: {}", peer_addr, filename_to_write);
-        filename_to_write = format_filename(&peer_addr.ip().to_string(), &filename_to_write);
+        filename_to_write = common::format_filename(&peer_addr.ip().to_string(), &filename_to_write);
 
         conn.write_message_from_string(String::from("OK")).await?;
 
@@ -125,11 +123,4 @@ async fn handle_client(sock: TcpStream, peer_addr: SocketAddr, tls_acceptor: Tls
 
         info!("{} file transfer complete. Connection closed.", peer_addr);
         Ok(())
-}
-
-fn format_filename(ip: &String, filename: &String) -> String {
-    let now: DateTime<Local> = Local::now();
-    let datetimestr = format!("{:02}{:02}{:04}_{:02}{:02}{:02}", 
-        now.month(), now.day(), now.year(), now.hour(), now.minute(), now.second());
-    format!("{}__{}__{}", datetimestr, ip, filename)
 }

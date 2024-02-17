@@ -1,6 +1,5 @@
 use std::path::Path;
 use std::process::Command;
-use chrono::Local;
 use env_logger::Env;
 use std::io::{self, BufReader};
 use regex::Regex;
@@ -10,6 +9,7 @@ use flate2::Compression;
 use log::debug;
 use std::io::Write;
 use tar;
+use chrono::{Datelike, Timelike, Local, DateTime};
 
 pub fn setup_logger() {
     env_logger::Builder::from_env(Env::default().filter_or("RUST_LOG", "info"))
@@ -26,6 +26,14 @@ pub fn setup_logger() {
 pub fn make_address_str(addr: &String, port: &i32) -> String {
     let a = String::clone(addr);
     String::from(a + ":" + &port.to_string())
+}
+
+/// used to format the filename that the server receives
+pub fn format_filename(ip: &String, filename: &String) -> String {
+    let now: DateTime<Local> = Local::now();
+    let datetimestr = format!("{:02}{:02}{:04}_{:02}{:02}{:02}", 
+        now.month(), now.day(), now.year(), now.hour(), now.minute(), now.second());
+    format!("{}__{}__{}", datetimestr, ip, filename)
 }
 
 /// Client needs to send filename in form: "filename:example_filename.zip:filename"
