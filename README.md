@@ -10,6 +10,7 @@ Client may need the WebPKI native cert authorities (firefox uses them, so im sur
 `cargo build` `cargo build --release` for release builds
 # Running the exes (devel - non release)
 `cargo run --bin server -- --ip "0.0.0.0" --port 4545 --cert "<absolute_path_to_cert_file>" --key "<absolute_path_to_key_file>"`
+
 `cargo run --bin client -- --ip "<server_ip_hostname_certdomain>" --port 4545 --file <absolute_path_of_file_to_send>`
 
 # Running release builds
