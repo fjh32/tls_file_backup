@@ -38,8 +38,8 @@ async fn main() -> io::Result<()> {
     info!("Compressing {}", args.file);
     let start = Instant::now();
     let (abs_compressed_filepath, compressed_file_to_send) =
-        tokio::task::spawn_blocking(|| common::compress(args.file, system_tmp_dir).unwrap())
-            .await?;
+        common::compress(args.file, system_tmp_dir).await?;
+
     info!(
         "Took {:?} to compress {}",
         start.elapsed(),
@@ -61,7 +61,7 @@ async fn main() -> io::Result<()> {
     for cert in certlist {
         root_cert_store.add(cert).unwrap();
     }
-    root_cert_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    root_cert_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned()); // maybe make this async
 
     let ip_addr = ServerName::try_from(args.ip).unwrap();
     let config = rustls::ClientConfig::builder()
