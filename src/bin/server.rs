@@ -21,8 +21,10 @@ use file_backup_service::connection;
 fn load_certs(filename: String) -> tokio::task::JoinHandle<Vec<CertificateDer<'static>>> {
     tokio::task::spawn_blocking(move || {
         let file = File::open(Path::new(&filename)).unwrap();
-        let mut reader = BufReader::new(file);
-        certs(&mut reader).into_iter().map(Result::unwrap).collect()
+        certs(&mut BufReader::new(file))
+            .into_iter()
+            .map(Result::unwrap)
+            .collect()
     })
 }
 
@@ -67,7 +69,6 @@ struct ServerArgs {
 #[tokio::main]
 async fn main() -> io::Result<()> {
     common::setup_logger();
-
     let args = ServerArgs::parse();
 
     let my_addr_str = common::make_address_str(&args.ip, &args.port);

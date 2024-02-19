@@ -2,7 +2,7 @@ use chrono::{DateTime, Datelike, Local, Timelike};
 use env_logger::Env;
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use log::debug;
+use log::{debug, info};
 use regex::Regex;
 use std::fs::{metadata, File};
 use std::io::Write;
@@ -23,6 +23,7 @@ pub fn setup_logger() {
             )
         })
         .init();
+    info!("=========================================================");
 }
 
 pub fn make_address_str(addr: &String, port: &i32) -> String {
