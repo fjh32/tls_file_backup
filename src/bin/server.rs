@@ -18,27 +18,35 @@ use file_backup_service::common;
 use file_backup_service::connection;
 
 // curl --cacert certs/new/server-certificate.pem https://ripplein.space:4545/ --resolve ripplein.space:4545:127.0.0.1
-fn load_certs(filename: &String) -> io::Result<Vec<CertificateDer<'static>>> {
-    let file = File::open(Path::new(filename))?;
-    certs(&mut BufReader::new(file)).collect()
+fn load_certs(filename: String) -> tokio::task::JoinHandle<Vec<CertificateDer<'static>>> {
+    tokio::task::spawn_blocking(move || {
+        let file = File::open(Path::new(&filename)).unwrap();
+        let mut reader = BufReader::new(file);
+        certs(&mut reader).into_iter().map(Result::unwrap).collect()
+    })
 }
 
 /// pkcs keys
-fn load_keys(filename: &String) -> io::Result<PrivateKeyDer<'static>> {
-    let file = File::open(Path::new(filename))?;
-    pkcs8_private_keys(&mut BufReader::new(file))
-        .next()
-        .unwrap()
-        .map(Into::into)
+fn load_keys(filename: String) -> tokio::task::JoinHandle<PrivateKeyDer<'static>> {
+    tokio::task::spawn_blocking(move || {
+        let file = File::open(Path::new(&filename)).unwrap();
+        pkcs8_private_keys(&mut BufReader::new(file))
+            .next()
+            .unwrap()
+            .map(Into::into)
+            .unwrap()
+    })
 }
 
 /// elliptic curve keys
-fn _load_ec_keys(filename: &str) -> io::Result<PrivateKeyDer<'static>> {
-    let file = File::open(Path::new(filename))?;
-    ec_private_keys(&mut BufReader::new(file))
-        .next()
-        .unwrap()
-        .map(Into::into)
+fn _load_ec_keys(filename: String) -> tokio::task::JoinHandle<io::Result<PrivateKeyDer<'static>>> {
+    tokio::task::spawn_blocking(move || {
+        let file = File::open(Path::new(&filename))?;
+        ec_private_keys(&mut BufReader::new(file))
+            .next()
+            .unwrap()
+            .map(Into::into)
+    })
 }
 
 #[derive(Parser, Debug)]
@@ -74,8 +82,9 @@ async fn main() -> io::Result<()> {
         .next()
         .ok_or_else(|| io::Error::from(io::ErrorKind::AddrNotAvailable))?;
 
-    let certs = load_certs(&args.cert)?;
-    let key = load_keys(&args.key)?;
+    let certs = load_certs(args.cert.clone()).await?;
+    let key = load_keys(args.key.clone()).await?;
+
     let config = rustls::ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(certs, key)
