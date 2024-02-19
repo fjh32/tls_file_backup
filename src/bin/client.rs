@@ -38,8 +38,8 @@ async fn main() -> io::Result<()> {
     info!("Compressing {}", args.file);
     let start = Instant::now();
     let (abs_compressed_filepath, compressed_file_to_send) =
-        tokio::task::spawn_blocking(|| common::compress(args.file, system_tmp_dir).unwrap())
-            .await?;
+        common::compress(args.file, system_tmp_dir).await?;
+
     info!(
         "Took {:?} to compress {}",
         start.elapsed(),

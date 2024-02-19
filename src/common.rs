@@ -1,15 +1,15 @@
 use chrono::{DateTime, Datelike, Local, Timelike};
 use env_logger::Env;
-use flate2::write::GzEncoder;
-use flate2::Compression;
-use log::debug;
+
 use regex::Regex;
-use std::fs::{metadata, File};
 use std::io::Write;
-use std::io::{self, BufReader};
+use std::io::{self};
 use std::path::Path;
-use std::process::Command;
-use tar;
+
+use async_compression::tokio::write::GzipEncoder;
+use tokio::fs::{metadata, File};
+use tokio::io::BufReader;
+use tokio::process::Command;
 
 pub fn setup_logger() {
     env_logger::Builder::from_env(Env::default().filter_or("RUST_LOG", "info"))
@@ -47,7 +47,8 @@ pub fn format_filename(ip: &String, filename: &String) -> String {
 
 /// Client needs to send filename in form: "filename:example_filename.zip:filename"
 pub fn verify_filename(filename: String) -> Result<String, io::Error> {
-    let re = Regex::new(r"filename:([a-zA-Z0-9\._-]+):filename").unwrap();
+    let re = std::cell::OnceCell::new();
+    let re = re.get_or_init(|| Regex::new(r"filename:([a-zA-Z0-9\._-]+):filename").unwrap());
 
     if re.is_match(&filename) {
         let extracted_filename = filename.replace("filename:", "").replace(":filename", "");
@@ -64,39 +65,45 @@ pub fn verify_filename(filename: String) -> Result<String, io::Error> {
 // don't do anything if an already compressed file is passed in
 // Issue when used like file_backup_client.sh <filename> (w/o a path provided in filename, it fails)
 /// compresses abs_file_or_dirname into system_tmp_dir/file_or_dirname.gz if a file or system_tmp_dir/file_or_dirname.tar.gz if a dir
-pub fn compress(
+pub async fn compress(
     abs_file_or_dirname: String,
     system_tmp_dir: String,
 ) -> Result<(String, String), std::io::Error> {
-    let filedata = metadata(&abs_file_or_dirname)?;
+    let filedata = metadata(&abs_file_or_dirname).await?;
     let path = Path::new(&abs_file_or_dirname);
-    let basefilename = path.file_name().unwrap().to_str().unwrap();
+    // you can eliminate this sort of thing by using thiserror or anyhow crates
+    let basefilename = path
+        .file_name()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Invalid filename"))?
+        .to_str()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Invalid filename"))?;
 
     if filedata.is_dir() {
         let archive_name = format!("{}.tar.gz", basefilename);
         let _abs_archive_path = format!("{}/{}", &system_tmp_dir, &archive_name);
-        compress_dir_shell(&_abs_archive_path, &abs_file_or_dirname)?;
+        compress_dir_shell(&_abs_archive_path, &abs_file_or_dirname).await?;
         Ok((_abs_archive_path, archive_name))
     } else {
         let archive_name = format!("{}.gz", basefilename);
         let _abs_archive_path = format!("{}/{}", &system_tmp_dir, &archive_name);
-        compress_file(&_abs_archive_path, &abs_file_or_dirname)?;
+        compress_file(&_abs_archive_path, &abs_file_or_dirname).await?;
         Ok((_abs_archive_path, archive_name))
     }
 }
 
-pub fn compress_file(archive_name: &String, absfilename: &String) -> Result<(), std::io::Error> {
-    let mut input_buf = BufReader::new(File::open(absfilename)?);
-    let archive_handle = File::create(archive_name)?;
+pub async fn compress_file(
+    archive_name: &String,
+    absfilename: &String,
+) -> Result<(), std::io::Error> {
+    let mut input_buf = BufReader::new(File::open(absfilename).await?);
+    let archive_handle = File::create(archive_name).await?;
 
-    let mut encoder = GzEncoder::new(archive_handle, Compression::default());
-    io::copy(&mut input_buf, &mut encoder)?;
-    let _archive_handle = encoder.finish()?;
-
+    let mut encoder = GzipEncoder::new(archive_handle);
+    tokio::io::copy(&mut input_buf, &mut encoder).await?;
     Ok(())
 }
 
-pub fn compress_dir_shell(
+pub async fn compress_dir_shell(
     archive_name: &String,
     absdirname: &String,
 ) -> Result<(), std::io::Error> {
@@ -104,25 +111,7 @@ pub fn compress_dir_shell(
         .arg("-zcf")
         .arg(archive_name)
         .arg(absdirname)
-        .output()?;
-    Ok(())
-}
-
-fn _compress_dir(
-    archive_name: &String,
-    absdirname: &String,
-    basefilename: &String,
-) -> Result<(), std::io::Error> {
-    // let absdirname = absdirname.clone();
-    let tar_gz_file_handle = File::create(archive_name)?;
-
-    let encoder = GzEncoder::new(tar_gz_file_handle, Compression::default());
-    let mut tar = tar::Builder::new(encoder);
-
-    debug!("CREATING TAR {} ::: {}", basefilename, absdirname);
-    tar.append_dir_all(basefilename, absdirname)?;
-    debug!("Wrapping up TAR");
-    tar.finish()?;
-    debug!("TAR Done");
+        .output()
+        .await?;
     Ok(())
 }
