@@ -1,19 +1,18 @@
+use clap::Parser;
+use log::{error, info};
+use rustls::RootCertStore;
 use std::fs::File;
 use std::io;
 use std::io::BufReader;
 use std::net::ToSocketAddrs;
 use std::sync::Arc;
 use std::time::Instant;
-use rustls::RootCertStore;
-use tokio_rustls::rustls::pki_types::ServerName;
 use tokio::net::TcpStream;
+use tokio_rustls::rustls::pki_types::ServerName;
 use tokio_rustls::TlsConnector;
-use log::{ error, info};
-use clap::Parser;
 
 use file_backup_service::common;
 use file_backup_service::connection;
-
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -26,7 +25,6 @@ struct ClientArgs {
     file: String,
 }
 
-
 #[tokio::main]
 async fn main() -> io::Result<()> {
     common::setup_logger();
@@ -38,9 +36,14 @@ async fn main() -> io::Result<()> {
 
     info!("Compressing {}", args.file);
     let start = Instant::now();
-    let (abs_compressed_filepath,compressed_file_to_send) = common::compress(args.file, system_tmp_dir)?;
-    info!("Took {:?} to compress {}", start.elapsed(), abs_compressed_filepath);
-    
+    let (abs_compressed_filepath, compressed_file_to_send) =
+        common::compress(args.file, system_tmp_dir)?;
+    info!(
+        "Took {:?} to compress {}",
+        start.elapsed(),
+        abs_compressed_filepath
+    );
+
     info!("Connecting to {}", host);
     let addr = host
         .to_string()
@@ -48,7 +51,6 @@ async fn main() -> io::Result<()> {
         .next()
         .ok_or_else(|| io::Error::from(io::ErrorKind::AddrNotAvailable))?;
 
-    
     let mut root_cert_store = rustls::RootCertStore::empty();
     for cert in rustls_native_certs::load_native_certs().expect("could not load platform certs") {
         root_cert_store.add(cert).unwrap();
@@ -65,34 +67,44 @@ async fn main() -> io::Result<()> {
     let tls_stream = tls_connector.connect(ip_addr, sock_stream).await?;
     let mut conn = connection::Connection::new(tls_stream);
     info!("TLS connection established with {}", host);
-    
+
     let filename_message_to_send = format!("filename:{}:filename", compressed_file_to_send);
-    conn.write_message_from_string(filename_message_to_send).await?;
+    conn.write_message_from_string(filename_message_to_send)
+        .await?;
 
     let server_response = conn.read_into_string().await?;
     if server_response != "OK" {
-        let msg = format!("Server sent a bad response to our file request. Aborting...");
+        let msg = "Server sent a bad response to our file request. Aborting...".to_string();
         error!("{}", msg);
         panic!("{}", msg);
     }
 
-    info!("Received ok from server. Sending {}", abs_compressed_filepath);
-    conn.write_from_file(abs_compressed_filepath.clone()).await?;
+    info!(
+        "Received ok from server. Sending {}",
+        abs_compressed_filepath
+    );
+    conn.write_from_file(abs_compressed_filepath.clone())
+        .await?;
     std::fs::remove_file(abs_compressed_filepath)?;
     info!("Client done. Exiting.");
     Ok(())
 }
 
-
-fn _add_cafile_to_root_store(roots:&mut RootCertStore, certfile: String) -> Result<(),io::Error>{
+fn _add_cafile_to_root_store(roots: &mut RootCertStore, certfile: String) -> Result<(), io::Error> {
     // USE this to include CA crt file with which to accept anyone's cert the CA has signed
     // very useful to distribute client with CA cert
     println!("OPENING CERT FILE {}", certfile);
     let mut pem = BufReader::new(File::open(certfile)?);
     for cert in rustls_pemfile::certs(&mut pem) {
         let cert = match cert {
-            Ok(cert) => {println!("Got a cert"); cert },
-            Err(_) => {println!("Err occurred "); break; }
+            Ok(cert) => {
+                println!("Got a cert");
+                cert
+            }
+            Err(_) => {
+                println!("Err occurred ");
+                break;
+            }
         };
         roots.add(cert).unwrap();
     }
