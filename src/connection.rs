@@ -53,13 +53,13 @@ impl<IO:AsyncRead + AsyncWriteExt + Unpin> Connection<IO> {
 
     /// Read from file, write to self.stream.
     pub async fn write_from_file(&mut self, filename: String) -> Result<usize, io::Error> {
-        let mut file = File::open(&filename)?;
+        let mut file = tokio::fs::File::open(&filename).await?;
 
         let mut buf: [u8;BUFFER_SIZE] = [0;BUFFER_SIZE];
         let start = Instant::now();
         let mut total_bytes = 0usize;
 
-        while let Ok(n) = file.read(&mut buf) {
+        while let Ok(n) = file.read(&mut buf).await {
             total_bytes += n;
             if n <= 0 {
                 break;
@@ -75,7 +75,7 @@ impl<IO:AsyncRead + AsyncWriteExt + Unpin> Connection<IO> {
 
     /// Read from self.stream, write to file
     pub async fn read_to_file(&mut self, filename: String) -> Result<usize, io::Error>{
-        let mut file = OpenOptions::new().read(true).write(true).create(true).open(&filename)?;
+        let mut file = tokio::fs::OpenOptions::new().read(true).write(true).create(true).open(&filename).await?;
 
         let mut buf: [u8;BUFFER_SIZE] = [0;BUFFER_SIZE]; // Rust won't allow dynamic sized regular arrays
         let start = Instant::now();
@@ -87,9 +87,13 @@ impl<IO:AsyncRead + AsyncWriteExt + Unpin> Connection<IO> {
                 break;
             }
             let bufdata = &buf[0..n];
-            file.write(bufdata)?;
+            file.write(bufdata).await?;
         }
-        info!("Receiving {} from client took {:?}", filename, start.elapsed());
+        let duration = start.elapsed();
+        let mut elapsed = duration.as_secs() as usize;
+        if elapsed <= 0 { elapsed = 1usize; }
+        let bps = total_bytes / elapsed;
+        info!("Receiving {} from client took {:?}. Network transfer speed: {} bytes per second.", filename, duration, bps);
         Ok(total_bytes)
     }
 }

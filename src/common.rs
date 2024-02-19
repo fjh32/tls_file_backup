@@ -49,6 +49,9 @@ pub fn verify_filename(filename:String) -> Result<String, io::Error> {
     }
 }
 
+// if file size < 10MB, don't compress
+// don't do anything if an already compressed file is passed in
+// Issue when used like file_backup_client.sh <filename> (w/o a path provided in filename, it fails)
 /// compresses abs_file_or_dirname into system_tmp_dir/file_or_dirname.gz if a file or system_tmp_dir/file_or_dirname.tar.gz if a dir
 pub fn compress(abs_file_or_dirname: String, system_tmp_dir: String) -> Result<(String,String), std::io::Error> {
     let filedata = metadata(&abs_file_or_dirname)?;

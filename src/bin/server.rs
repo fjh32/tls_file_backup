@@ -99,12 +99,12 @@ async fn main() -> io::Result<()> {
             };
         });
     }
-
 }
 
 
 async fn handle_client(sock: TcpStream, peer_addr: SocketAddr, tls_acceptor: TlsAcceptor, server_args: Arc<ServerArgs>) -> Result<(), io::Error> {
 
+        info!("=================== New Client ===================");
         let tls_stream = tls_acceptor.accept(sock).await?;
         let mut conn = connection::Connection::new(tls_stream);
         info!("Connected via TLS to {}", peer_addr);

@@ -36,6 +36,7 @@ async fn main() -> io::Result<()> {
     let args = ClientArgs::parse();
     let host = common::make_address_str(&args.ip, &args.port);
 
+    // provide option to compress or not compress
     info!("Compressing {}", args.file);
     let start = Instant::now();
     let (abs_compressed_filepath,compressed_file_to_send) = common::compress(args.file, system_tmp_dir)?;
