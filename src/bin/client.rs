@@ -37,7 +37,7 @@ async fn main() -> io::Result<()> {
     info!("Compressing {}", args.file);
     let start = Instant::now();
     let (abs_compressed_filepath, compressed_file_to_send) =
-        common::compress(args.file, system_tmp_dir)?;
+        common::compress(args.file, system_tmp_dir).await?;
     info!(
         "Took {:?} to compress {}",
         start.elapsed(),
