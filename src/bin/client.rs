@@ -34,10 +34,12 @@ async fn main() -> io::Result<()> {
     let args = ClientArgs::parse();
     let host = common::make_address_str(&args.ip, &args.port);
 
+    // provide option to compress or not compress
     info!("Compressing {}", args.file);
     let start = Instant::now();
     let (abs_compressed_filepath, compressed_file_to_send) =
         common::compress(args.file, system_tmp_dir).await?;
+
     info!(
         "Took {:?} to compress {}",
         start.elapsed(),
@@ -52,7 +54,11 @@ async fn main() -> io::Result<()> {
         .ok_or_else(|| io::Error::from(io::ErrorKind::AddrNotAvailable))?;
 
     let mut root_cert_store = rustls::RootCertStore::empty();
-    for cert in rustls_native_certs::load_native_certs().expect("could not load platform certs") {
+    let certlist = tokio::task::spawn_blocking(|| {
+        rustls_native_certs::load_native_certs().expect("Could not load platform certs")
+    })
+    .await?;
+    for cert in certlist {
         root_cert_store.add(cert).unwrap();
     }
     root_cert_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
@@ -85,7 +91,7 @@ async fn main() -> io::Result<()> {
     );
     conn.write_from_file(abs_compressed_filepath.clone())
         .await?;
-    std::fs::remove_file(abs_compressed_filepath)?;
+    tokio::fs::remove_file(abs_compressed_filepath).await?;
     info!("Client done. Exiting.");
     Ok(())
 }

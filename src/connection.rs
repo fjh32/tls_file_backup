@@ -49,8 +49,8 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> Connection<IO> {
     }
 
     /// Read from self.stream, write to file
-    pub async fn read_to_file(&mut self, filename: String) -> Result<u64, io::Error> {
-        let mut file = OpenOptions::new()
+    pub async fn read_to_file(&mut self, filename: String) -> Result<usize, io::Error> {
+        let mut file = tokio::fs::OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
@@ -59,10 +59,16 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> Connection<IO> {
 
         let start = Instant::now();
         let total_bytes = tokio::io::copy(&mut self.stream, &mut file).await?;
+
+        let duration = start.elapsed();
+        let mut elapsed = duration.as_secs() as usize;
+        if elapsed == 0 {
+            elapsed = 1usize;
+        }
+        let bps = total_bytes / elapsed;
         info!(
-            "Receiving {} from client took {:?}",
-            filename,
-            start.elapsed()
+            "Receiving {} from client took {:?}. Network transfer speed: {} bytes per second.",
+            filename, duration, bps
         );
         Ok(total_bytes)
     }
