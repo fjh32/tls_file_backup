@@ -78,7 +78,9 @@ pub async fn compress(
         .to_str()
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Invalid filename"))?;
 
-    if filedata.is_dir() {
+    if !abs_file_or_dirname.contains(".gz") {
+        Ok((abs_file_or_dirname.clone(), basefilename.to_string()))
+    } else if filedata.is_dir() {
         let archive_name = format!("{}.tar.gz", basefilename);
         let _abs_archive_path = format!("{}/{}", &system_tmp_dir, &archive_name);
         compress_dir_shell(&_abs_archive_path, &abs_file_or_dirname).await?;
