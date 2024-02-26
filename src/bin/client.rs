@@ -5,8 +5,8 @@ use std::fs::File;
 use std::io;
 use std::io::BufReader;
 use std::net::ToSocketAddrs;
+use std::path::Path;
 use std::sync::Arc;
-use std::time::Instant;
 use tokio::net::TcpStream;
 use tokio_rustls::rustls::pki_types::ServerName;
 use tokio_rustls::TlsConnector;
@@ -17,34 +17,33 @@ use file_backup_service::connection;
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct ClientArgs {
-    #[arg(short, long, default_value = "ripplein.space")]
+    #[arg(short, long, default_value = "192.168.1.110")]
     ip: String,
     #[arg(short, long, default_value_t = 4545)]
     port: i32,
-    #[arg(short, long)]
-    file: String,
+    #[arg(short, long, default_value = "./test_files")]
+    file: String
 }
 
+// client needs to print output of tar
+// attempt to make temp dir if it doesnt exist
+
+// why isn't systemd client service working
+// compress in memory?
 #[tokio::main]
 async fn main() -> io::Result<()> {
     common::setup_logger();
-
-    let system_tmp_dir = String::from(std::env::temp_dir().to_str().unwrap_or("/tmp"));
-
     let args = ClientArgs::parse();
     let host = common::make_address_str(&args.ip, &args.port);
 
-    // provide option to compress or not compress
-    info!("Compressing {} into tempdir: {}", args.file, system_tmp_dir);
-    let start = Instant::now();
-    let (abs_compressed_filepath, compressed_file_to_send) =
-        common::compress(args.file, system_tmp_dir).await?;
+    let path = Path::new(&args.file);
+    let is_dir = path.is_dir();
+    let archivename_to_tell_server = match is_dir {
+        true => path.file_name().unwrap().to_str().unwrap().to_string() + ".tar.gz",
+        false => path.file_name().unwrap().to_str().unwrap().to_string() + ".gz"
+    };
+    let absolute_path_to_archive_and_send = std::fs::canonicalize(&path)?.to_str().unwrap().to_string();
 
-    info!(
-        "Took {:?} to compress {}",
-        start.elapsed(),
-        abs_compressed_filepath
-    );
 
     info!("Connecting to {}", host);
     let addr = host
@@ -74,7 +73,10 @@ async fn main() -> io::Result<()> {
     let mut conn = connection::Connection::new(tls_stream);
     info!("TLS connection established with {}", host);
 
-    let filename_message_to_send = format!("filename:{}:filename", compressed_file_to_send);
+
+    // sequential message passing with server
+
+    let filename_message_to_send = format!("filename:{}:filename", archivename_to_tell_server);
     conn.write_message_from_string(filename_message_to_send)
         .await?;
 
@@ -87,15 +89,22 @@ async fn main() -> io::Result<()> {
 
     info!(
         "Received ok from server. Sending {}",
-        abs_compressed_filepath
+        absolute_path_to_archive_and_send
     );
-    conn.write_from_file(abs_compressed_filepath.clone())
-        .await?;
-    tokio::fs::remove_file(abs_compressed_filepath).await?;
+
+    if is_dir {
+        conn.compress_and_send_dir(absolute_path_to_archive_and_send).await?;
+    }
+    else {
+        conn.compress_and_send_file(absolute_path_to_archive_and_send).await?;
+    }
+
     info!("Client done. Exiting.");
     Ok(())
 }
 
+
+// use this and just distribute client with .crt?
 fn _add_cafile_to_root_store(roots: &mut RootCertStore, certfile: String) -> Result<(), io::Error> {
     // USE this to include CA crt file with which to accept anyone's cert the CA has signed
     // very useful to distribute client with CA cert

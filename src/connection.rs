@@ -1,8 +1,11 @@
+use async_compression::tokio::bufread::GzipEncoder;
 use log::info;
+use tokio::process::Command;
 use std::io;
+use std::process::Stdio;
 use std::time::Instant;
 use tokio::fs::File;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 
 const BUFFER_SIZE: usize = 1024 * 15;
 
@@ -10,6 +13,11 @@ pub struct Connection<IO> {
     // these generic type bounds will make it easy to unit test
     pub stream: IO,
 }
+
+// impl<IO: AsyncRead + AsyncWrite + Unpin> AsyncWrite for Connection<IO> {
+
+// }
+
 
 impl<IO: AsyncRead + AsyncWrite + Unpin> Connection<IO> {
     pub fn new(iostream: IO) -> Connection<IO> {
@@ -40,15 +48,40 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> Connection<IO> {
         Ok(())
     }
 
-    /// Read from file, write to self.stream.
-    pub async fn write_from_file(&mut self, filename: String) -> Result<u64, io::Error> {
-        let mut file = File::open(&filename).await?;
-        // can use a bufreader to customize buffer size, default is 8k
-        let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+    // this function needs to do this: $ tar cf - /src_dir" | gzip | tls send -> Server receives a .tar.gz
+    pub async fn compress_and_send_dir(&mut self, dirname: String) -> Result<u64, io::Error> {
         let start = Instant::now();
-        let mut total_bytes = 0u64;
 
-        while let Ok(n) = file.read(&mut buf).await {
+        let mut tarcmd = Command::new("tar")
+            .arg("-cf")
+            .arg("-")
+            .arg(&dirname)
+            .stdout(Stdio::piped())
+            .spawn().unwrap();
+
+        let proc_out = tarcmd.stdout.as_mut().unwrap();
+        let proc_out_reader = BufReader::new(proc_out);
+        let mut encoder = GzipEncoder::new(proc_out_reader);
+
+        let res = self.write_reader_to_stream(&mut encoder).await;
+        info!("Sending {} to server took {:?}", dirname, start.elapsed());
+
+        res
+    }
+
+    pub async fn compress_and_send_file(&mut self, filename: String) -> Result<u64, io::Error> {
+        let start = Instant::now();
+        let mut encoder = GzipEncoder::new(BufReader::new(File::open(&filename).await?));
+        let res = self.write_reader_to_stream(&mut encoder).await;
+        info!("Sending {} to server took {:?}", filename, start.elapsed());
+
+        res
+    }
+
+    async fn write_reader_to_stream<T>(&mut self, reader:&mut T) -> Result<u64, io::Error> where T: AsyncRead + Unpin {
+        let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+        let mut total_bytes = 0u64;
+        while let Ok(n) = reader.read(&mut buf).await {
             if n == 0 {
                 break;
             }
@@ -57,8 +90,17 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> Connection<IO> {
             let _n = self.stream.write(bufdata).await?;
             self.stream.flush().await?; // this line right here is why we can't simply do a tokio::copy(file,stream)
         }
-        info!("Sending {} to server took {:?}", filename, start.elapsed());
         Ok(total_bytes)
+    }
+
+    /// Read from file, write to self.stream.
+    pub async fn write_from_file(&mut self, filename: String) -> Result<u64, io::Error> {
+        let mut file = File::open(&filename).await?;
+        // can use a bufreader to customize buffer size, default is 8k
+        let start = Instant::now();
+        let res = self.write_reader_to_stream(&mut file).await;
+        info!("Sending {} to server took {:?}", filename, start.elapsed());
+        res
     }
 
     /// Read from self.stream, write to file
