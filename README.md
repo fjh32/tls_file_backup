@@ -1,24 +1,41 @@
-# Generate certs:
+# TLS file backup
+A TLS client/server that can be used to backup files and directories.<br>
+- The Client takes a file or directory, archives it, compresses it, encrypts it over TLS, and sends it to a server.
+    Much care is taken to ensure this is all done in-memory, meaning there is no need for a client to have extra drive space to create an archive to send the server.
+    This makes this application *extremely* useful in backing up *very* large directories, such as `/home`.
+
+- The Server receives these client requests and writes the data to a .tar.gz in a preconfigured backup directory.
+
+
+## In production, get certs from valid CA
+- Use certbot (or any other preferred method) to get yourself a valid cert/key for TLS
+- `certbot certonly --standalone -d <your_domain>`
+## Generate certs for development:
 USE [mkcert](https://github.com/FiloSottile/mkcert) utility to generate certs and add ca root to trusted roots of system.
-In public environment, use certificates from letsencrypt on my server, 
-but make sure client code works with it using `rustls_native_certs::load_native_certs()`. 
-Client may need the WebPKI native cert authorities (firefox uses them, so im sure they have letencrypt CA).
+In public environment, use certificates from letsencrypt on server.
 
 
 # After you're sure you have working certs;
+# Running the .exe's (see releases)
+- Note: Only compiled for linux x86_64. Can supply .exe's for more.
+- Note: Client only works if the server is using a valid cert signed by a CA like LetsEncrypt. Client uses default system root store.
+- Note: Server supplies valid cert/key pair. Get one from certbot.
+- Note: Server and client both use port 4545 (make sure the server:4545 is accessible for the client).
+        You can set default ports with command line option on either exe `--port <portno>`
+- `server --cert "<absolute_path_to_cert_file>" --key "<absolute_path_to_key_file>" --backup-dir "<dir_to_put_archives>"`
+- `client --host "<hostname_of_server_on_cert>" --file "<absolute_path_of_file_or_directory_to_send>"`
+
+
 ## Build
+Tested on RPI, Mac OS, and Linux x86_64
 `cargo build` `cargo build --release` for release builds
 ## Running the exes (devel - non release)
-`cargo run --bin server -- --ip "0.0.0.0" --port 4545 --cert "<absolute_path_to_cert_file>" --key "<absolute_path_to_key_file>"`
+`cargo run --bin server -- --ip "0.0.0.0" --port 4545 --cert "<absolute_path_to_cert_file>" --key "<absolute_path_to_key_file>" --backup-dir <dir_to_put_archives>`
 
 `cargo run --bin client -- --ip "<server_ip_hostname_certdomain>" --port 4545 --file <absolute_path_of_file_to_send>`
 
-## Running release builds
-Pass the same params as above to the exes
-
-
-
-# How certs and client-validation of certs works
+## Personal notes
+### How certs and client-validation of certs works
 certificate authority (CA) signs a certificate (Csa) with its own CRT (CaCrt), producing End entity cert Ce.
 Server hosting the TLS app (Sa) gets Csa & its own private key Ksa signed by CA and receives Ce.
 Sa uses Ce and Ksa as its TLS encryption credentials.
@@ -29,7 +46,7 @@ Now, when a client initiates a connection to Sa, and Sa presents Ce, client trus
 
 
 
-## Old notes
+### Old 
 ### 
 
 run server with env variable `RUST_LOG=trace cargo run --bin server` to view all logging
@@ -47,7 +64,7 @@ openssl req -new -x509 -sha256 -key server-private-key.pem -subj "/CN=duckduckgo
 
 Create garbage test file: `dd if=/dev/urandom of=random.img count=1024 bs=1M` or `fallocate -l 1G example.file`
 
-# status
+## status
 [x] TLS connection between client and server (w/ trusted CA on client explained above)
 
 [x] Streaming messages between client and server
@@ -56,7 +73,7 @@ Create garbage test file: `dd if=/dev/urandom of=random.img count=1024 bs=1M` or
 
 [ ] Unit test `file_backup_service::connection::Connection` struct
 
-[ ] Client: Compress TLS stream buffer in memory (flate2 gzencoder) instead of compressing entire file before sending it<br>
+[X] Client: Compress TLS stream buffer in memory (flate2 gzencoder) instead of compressing entire file before sending it<br>
         - Either way, if directory, you'd have to archive prior to streaming it anyway...
 
 [ ] SHA file checksum

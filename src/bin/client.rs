@@ -1,9 +1,8 @@
 use clap::Parser;
 use log::{error, info};
-use rustls::RootCertStore;
-use std::fs::File;
+
 use std::io;
-use std::io::BufReader;
+
 use std::net::ToSocketAddrs;
 use std::sync::Arc;
 use tokio::net::TcpStream;
@@ -16,11 +15,11 @@ use file_backup_service::connection;
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct ClientArgs {
-    #[arg(short, long, default_value = "192.168.1.110")]
-    ip: String,
+    #[arg(short, long)]
+    host: String,
     #[arg(short, long, default_value_t = 4545)]
     port: i32,
-    #[arg(short, long, default_value = "./test_files")]
+    #[arg(short, long)]
     file: String,
 }
 
@@ -28,7 +27,7 @@ struct ClientArgs {
 async fn main() -> io::Result<()> {
     common::setup_logger();
     let args = ClientArgs::parse();
-    let host = common::make_address_str(&args.ip, &args.port);
+    let host = common::make_address_str(&args.host, &args.port);
 
     let (absolute_path_to_archive_and_send, archivename_to_tell_server) =
         common::get_fileinfo_to_send(&args.file)?;
@@ -51,7 +50,7 @@ async fn main() -> io::Result<()> {
     }
     root_cert_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned()); // maybe make this async
 
-    let ip_addr = ServerName::try_from(args.ip).unwrap();
+    let ip_addr = ServerName::try_from(args.host).unwrap();
     let config = rustls::ClientConfig::builder()
         .with_root_certificates(root_cert_store)
         .with_no_client_auth();
@@ -87,12 +86,13 @@ async fn main() -> io::Result<()> {
     Ok(())
 }
 
-
-
-
-
 // use this and just distribute client with .crt?
+#[cfg(debug_assertions)]
+use rustls::RootCertStore;
+#[cfg(debug_assertions)]
 fn _add_cafile_to_root_store(roots: &mut RootCertStore, certfile: String) -> Result<(), io::Error> {
+    use std::io::BufReader;
+    use std::fs::File;
     // USE this to include CA crt file with which to accept anyone's cert the CA has signed
     // very useful to distribute client with CA cert
     println!("OPENING CERT FILE {}", certfile);

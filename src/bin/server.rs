@@ -63,7 +63,7 @@ struct ServerArgs {
     #[arg(short, long)]
     key: String,
     #[arg(short, long, default_value = "/drives/breen/backups/")]
-    write_dir: String,
+    backup_dir: String,
 }
 
 #[tokio::main]
@@ -74,7 +74,7 @@ async fn main() -> io::Result<()> {
     let my_addr_str = common::make_address_str(&args.ip, &args.port);
     info!(
         "TLS Server running on {}. Writing incoming files to {}",
-        my_addr_str, args.write_dir
+        my_addr_str, args.backup_dir
     );
 
     let addr = my_addr_str
@@ -130,7 +130,7 @@ async fn handle_client(
 
     conn.write_message_from_string(String::from("OK")).await?;
 
-    let mut absfilepath = server_args.write_dir.clone();
+    let mut absfilepath = server_args.backup_dir.clone();
     absfilepath.push_str(&filename_to_write);
     info!("Reading data from {} into {}", peer_addr, absfilepath);
     conn.read_to_file(absfilepath).await?;
