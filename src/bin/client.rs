@@ -5,7 +5,6 @@ use std::fs::File;
 use std::io;
 use std::io::BufReader;
 use std::net::ToSocketAddrs;
-use std::path::Path;
 use std::sync::Arc;
 use tokio::net::TcpStream;
 use tokio_rustls::rustls::pki_types::ServerName;
@@ -22,29 +21,19 @@ struct ClientArgs {
     #[arg(short, long, default_value_t = 4545)]
     port: i32,
     #[arg(short, long, default_value = "./test_files")]
-    file: String
+    file: String,
 }
 
-// client needs to print output of tar
-// attempt to make temp dir if it doesnt exist
-
-// why isn't systemd client service working
-// compress in memory?
 #[tokio::main]
 async fn main() -> io::Result<()> {
     common::setup_logger();
     let args = ClientArgs::parse();
     let host = common::make_address_str(&args.ip, &args.port);
 
-    let path = Path::new(&args.file);
-    let is_dir = path.is_dir();
-    let archivename_to_tell_server = match is_dir {
-        true => path.file_name().unwrap().to_str().unwrap().to_string() + ".tar.gz",
-        false => path.file_name().unwrap().to_str().unwrap().to_string() + ".gz"
-    };
-    let absolute_path_to_archive_and_send = std::fs::canonicalize(&path)?.to_str().unwrap().to_string();
+    let (absolute_path_to_archive_and_send, archivename_to_tell_server) =
+        common::get_fileinfo_to_send(&args.file)?;
 
-
+    //// TLS Setup ////
     info!("Connecting to {}", host);
     let addr = host
         .to_string()
@@ -72,10 +61,9 @@ async fn main() -> io::Result<()> {
     let tls_stream = tls_connector.connect(ip_addr, sock_stream).await?;
     let mut conn = connection::Connection::new(tls_stream);
     info!("TLS connection established with {}", host);
-
+    //// TLS Setup ////
 
     // sequential message passing with server
-
     let filename_message_to_send = format!("filename:{}:filename", archivename_to_tell_server);
     conn.write_message_from_string(filename_message_to_send)
         .await?;
@@ -92,16 +80,15 @@ async fn main() -> io::Result<()> {
         absolute_path_to_archive_and_send
     );
 
-    if is_dir {
-        conn.compress_and_send_dir(absolute_path_to_archive_and_send).await?;
-    }
-    else {
-        conn.compress_and_send_file(absolute_path_to_archive_and_send).await?;
-    }
+    conn.compress_and_send(absolute_path_to_archive_and_send)
+        .await?;
 
     info!("Client done. Exiting.");
     Ok(())
 }
+
+
+
 
 
 // use this and just distribute client with .crt?
