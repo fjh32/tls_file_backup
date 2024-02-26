@@ -61,6 +61,21 @@ pub fn verify_filename(filename: String) -> Result<String, io::Error> {
     }
 }
 
+pub fn get_fileinfo_to_send(filename: &str) -> Result<(String, String), io::Error> {
+    let path = Path::new(filename);
+    let archivename_to_tell_server = match path.is_dir() {
+        true => path.file_name().unwrap().to_str().unwrap().to_string() + ".tar.gz",
+        false => path.file_name().unwrap().to_str().unwrap().to_string() + ".gz",
+    };
+    let absolute_path_to_archive_and_send =
+        std::fs::canonicalize(&path)?.to_str().unwrap().to_string();
+
+    Ok((
+        absolute_path_to_archive_and_send,
+        archivename_to_tell_server,
+    ))
+}
+
 // if file size < 10MB, don't compress
 // don't do anything if an already compressed file is passed in
 // Issue when used like file_backup_client.sh <filename> (w/o a path provided in filename, it fails)
@@ -80,7 +95,8 @@ pub async fn compress(
 
     if abs_file_or_dirname.contains(".gz") || abs_file_or_dirname.contains(".zip") {
         Ok((abs_file_or_dirname.clone(), basefilename.to_string()))
-    } else if filedata.is_dir() { // zip on macs tar on linux
+    } else if filedata.is_dir() {
+        // zip on macs tar on linux
         let archive_name = format!("{}.tar.gz", basefilename);
         let _abs_archive_path = format!("{}/{}", &system_tmp_dir, &archive_name);
         compress_dir_shell(&_abs_archive_path, &abs_file_or_dirname).await?;

@@ -1,13 +1,16 @@
+use async_compression::tokio::bufread::GzipEncoder;
 use log::info;
 use std::io;
+use std::path::Path;
+use std::process::Stdio;
 use std::time::Instant;
 use tokio::fs::File;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
+use tokio::process::Command;
 
 const BUFFER_SIZE: usize = 1024 * 15;
 
 pub struct Connection<IO> {
-    // these generic type bounds will make it easy to unit test
     pub stream: IO,
 }
 
@@ -40,24 +43,71 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> Connection<IO> {
         Ok(())
     }
 
+    pub async fn compress_and_send(&mut self, dir_or_filename: String) -> Result<u64, io::Error> {
+        let path = Path::new(&dir_or_filename);
+        if path.is_dir() {
+            self.compress_and_send_dir(dir_or_filename).await
+        } else if path.is_file() {
+            self.compress_and_send_file(dir_or_filename).await
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Not accepting anything except directories or files",
+            ))
+        }
+    }
+
+    // this function needs to do this: $ tar cf - /src_dir" | gzip | tls send ==> TLS Server receives a .tar.gz as a stream
+    async fn compress_and_send_dir(&mut self, dirname: String) -> Result<u64, io::Error> {
+        let mut tarcmd = Command::new("tar")
+            .arg("-cf")
+            .arg("-")
+            .arg(&dirname)
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        let proc_out = tarcmd.stdout.as_mut().unwrap();
+        let proc_out_reader = BufReader::new(proc_out);
+        let mut encoder = GzipEncoder::new(proc_out_reader);
+
+        self.write_reader_to_stream(&mut encoder).await
+    }
+
+    async fn compress_and_send_file(&mut self, filename: String) -> Result<u64, io::Error> {
+        let mut encoder = GzipEncoder::new(BufReader::new(File::open(&filename).await?));
+        self.write_reader_to_stream(&mut encoder).await
+    }
+
     /// Read from file, write to self.stream.
     pub async fn write_from_file(&mut self, filename: String) -> Result<u64, io::Error> {
         let mut file = File::open(&filename).await?;
-        // can use a bufreader to customize buffer size, default is 8k
-        let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
-        let start = Instant::now();
-        let mut total_bytes = 0u64;
+        self.write_reader_to_stream(&mut file).await
+    }
 
-        while let Ok(n) = file.read(&mut buf).await {
+    // underlying buffered write to self.stream
+    async fn write_reader_to_stream<T>(&mut self, reader: &mut T) -> Result<u64, io::Error>
+    where
+        T: AsyncRead + Unpin,
+    {
+        let start = Instant::now();
+        let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+        let mut total_bytes = 0u64;
+        while let Ok(n) = reader.read(&mut buf).await {
             if n == 0 {
                 break;
             }
             total_bytes += n as u64;
             let bufdata = &buf[0..n];
             let _n = self.stream.write(bufdata).await?;
+            // TLS Stream needs flushing
             self.stream.flush().await?; // this line right here is why we can't simply do a tokio::copy(file,stream)
         }
-        info!("Sending {} to server took {:?}", filename, start.elapsed());
+        info!(
+            "Sending {} bytes to server took {:?}",
+            total_bytes,
+            start.elapsed()
+        );
         Ok(total_bytes)
     }
 
