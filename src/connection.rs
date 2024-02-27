@@ -133,14 +133,14 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> Connection<IO> {
             let _n = file.write(bufdata).await?;
         }
         let duration = start.elapsed();
-        let mut elapsed = duration.as_secs() as u64;
+        let mut elapsed = duration.as_secs();
         if elapsed == 0 {
             elapsed = 1u64;
         }
         let bps = total_bytes / elapsed;
         info!(
-            "Receiving {} from client took {:?}. Network transfer speed: {} bytes per second.",
-            filename, duration, bps
+            "Receiving {} bytes for {} from client took {:?}. Network transfer speed: {} bytes per second.",
+            total_bytes, filename, duration, bps
         );
         Ok(total_bytes)
     }

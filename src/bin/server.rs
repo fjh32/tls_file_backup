@@ -22,7 +22,6 @@ fn load_certs(filename: String) -> tokio::task::JoinHandle<Vec<CertificateDer<'s
     tokio::task::spawn_blocking(move || {
         let file = File::open(Path::new(&filename)).unwrap();
         certs(&mut BufReader::new(file))
-            .into_iter()
             .map(Result::unwrap)
             .collect()
     })

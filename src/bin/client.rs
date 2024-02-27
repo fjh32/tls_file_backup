@@ -91,8 +91,8 @@ async fn main() -> io::Result<()> {
 use rustls::RootCertStore;
 #[cfg(debug_assertions)]
 fn _add_cafile_to_root_store(roots: &mut RootCertStore, certfile: String) -> Result<(), io::Error> {
-    use std::io::BufReader;
     use std::fs::File;
+    use std::io::BufReader;
     // USE this to include CA crt file with which to accept anyone's cert the CA has signed
     // very useful to distribute client with CA cert
     println!("OPENING CERT FILE {}", certfile);

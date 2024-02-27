@@ -68,7 +68,7 @@ pub fn get_fileinfo_to_send(filename: &str) -> Result<(String, String), io::Erro
         false => path.file_name().unwrap().to_str().unwrap().to_string() + ".gz",
     };
     let absolute_path_to_archive_and_send =
-        std::fs::canonicalize(&path)?.to_str().unwrap().to_string();
+        std::fs::canonicalize(path)?.to_str().unwrap().to_string();
 
     Ok((
         absolute_path_to_archive_and_send,
