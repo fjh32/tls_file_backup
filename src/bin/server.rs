@@ -1,113 +1,139 @@
-use std::error::Error;
+use clap::Parser;
+use log::{error, info};
+use rustls_pemfile::ec_private_keys;
+use rustls_pemfile::{certs, pkcs8_private_keys};
 use std::fs::File;
 use std::io;
 use std::io::BufReader;
 use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
 use std::path::Path;
-use file_backup_service::connection::Connection;
-use rustls_pemfile::ec_private_keys;
-use rustls_pemfile::{certs, rsa_private_keys, pkcs8_private_keys};
-use rustls::ServerConfig;
-use tokio::io::AsyncReadExt;
-use tokio::io::{copy, sink, split, AsyncWriteExt};
+use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::rustls::pki_types::CertificateDer;
 use tokio_rustls::rustls::pki_types::PrivateKeyDer;
 use tokio_rustls::TlsAcceptor;
-use std::sync::Arc;
 
 use file_backup_service::common;
 use file_backup_service::connection;
 
-
-const MY_ADDR: &str = "0.0.0.0:4545";
-// const CERT: &str = "certs/new_localhost/server-certificate.pem";
-// const KEY: &str = "certs/new_localhost/server-private-key.pem";
-const CERT: &str = "/home/frank/certs/ripplein.space-dev.pem";
-const KEY: &str = "/home/frank/certs/ripplein.space-dev-key.pem";
-
 // curl --cacert certs/new/server-certificate.pem https://ripplein.space:4545/ --resolve ripplein.space:4545:127.0.0.1
-fn load_certs(path: &Path) -> io::Result<Vec<CertificateDer<'static>>> {
-    certs(&mut BufReader::new(File::open(path)?)).collect()
+fn load_certs(filename: String) -> tokio::task::JoinHandle<Vec<CertificateDer<'static>>> {
+    tokio::task::spawn_blocking(move || {
+        let file = File::open(Path::new(&filename)).unwrap();
+        certs(&mut BufReader::new(file))
+            .map(Result::unwrap)
+            .collect()
+    })
 }
 
-fn load_keys(path: &Path) -> io::Result<PrivateKeyDer<'static>> {
-    pkcs8_private_keys(&mut BufReader::new(File::open(path)?))
-        .next()
-        .unwrap()
-        .map(Into::into)
+/// pkcs keys
+fn load_keys(filename: String) -> tokio::task::JoinHandle<PrivateKeyDer<'static>> {
+    tokio::task::spawn_blocking(move || {
+        let file = File::open(Path::new(&filename)).unwrap();
+        pkcs8_private_keys(&mut BufReader::new(file))
+            .next()
+            .unwrap()
+            .map(Into::into)
+            .unwrap()
+    })
 }
 
-fn load_ec_keys(path: &Path) -> io::Result<PrivateKeyDer<'static>> {
-    ec_private_keys(&mut BufReader::new(File::open(path)?))
-        .next()
-        .unwrap()
-        .map(Into::into)
+/// elliptic curve keys
+fn _load_ec_keys(filename: String) -> tokio::task::JoinHandle<io::Result<PrivateKeyDer<'static>>> {
+    tokio::task::spawn_blocking(move || {
+        let file = File::open(Path::new(&filename))?;
+        ec_private_keys(&mut BufReader::new(file))
+            .next()
+            .unwrap()
+            .map(Into::into)
+    })
+}
+
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct ServerArgs {
+    #[arg(short, long, default_value = "0.0.0.0")]
+    ip: String,
+    #[arg(short, long, default_value_t = 4545)]
+    port: i32,
+    #[arg(short, long)]
+    cert: String,
+    #[arg(short, long)]
+    key: String,
+    #[arg(short, long, default_value = "/drives/breen/backups/")]
+    backup_dir: String,
 }
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    let addr = MY_ADDR
+    common::setup_logger();
+    let args = ServerArgs::parse();
+
+    let my_addr_str = common::make_address_str(&args.ip, &args.port);
+    info!(
+        "TLS Server running on {}. Writing incoming files to {}",
+        my_addr_str, args.backup_dir
+    );
+
+    let addr = my_addr_str
         .to_string()
         .to_socket_addrs()?
         .next()
         .ok_or_else(|| io::Error::from(io::ErrorKind::AddrNotAvailable))?;
 
-    let certs = load_certs(&Path::new(CERT))?;
-    let key = load_keys(&Path::new(KEY))?;
+    let certs = load_certs(args.cert.clone()).await?;
+    let key = load_keys(args.key.clone()).await?;
 
     let config = rustls::ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(certs, key)
         .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
+    info!("Loaded keys from: {}", args.cert);
 
-    let tlsacceptor =  TlsAcceptor::from(Arc::new(config));
+    let args = Arc::new(args);
+    let tlsacceptor = TlsAcceptor::from(Arc::new(config));
     let listener = TcpListener::bind(&addr).await?;
 
     loop {
+        let args = args.clone();
         let (socket, peer_addr) = listener.accept().await?;
         let tlsacceptor_ptr = tlsacceptor.clone();
 
         tokio::spawn(async move {
-            if let Err(err) = handle_client(socket, peer_addr, tlsacceptor_ptr).await {
-                eprintln!("{:?}", err);
+            if let Err(err) = handle_client(socket, peer_addr, tlsacceptor_ptr, args).await {
+                error!("{:?}", err);
             };
         });
     }
-
-    Ok(())
 }
 
+async fn handle_client(
+    sock: TcpStream,
+    peer_addr: SocketAddr,
+    tls_acceptor: TlsAcceptor,
+    server_args: Arc<ServerArgs>,
+) -> Result<(), io::Error> {
+    info!("=================== New Client ===================");
+    let tls_stream = tls_acceptor.accept(sock).await?;
+    let mut conn = connection::Connection::new(tls_stream);
+    info!("Connected via TLS to {}", peer_addr);
 
-async fn handle_client(sock: TcpStream, peer_addr: SocketAddr, tls_acceptor: TlsAcceptor) -> Result<(), Box<dyn Error>>{
-        // handshake to establish encrypted connection
-        let mut tls_stream = match tls_acceptor.accept(sock).await {
-            Ok(tls_stream) => tls_stream,
-            Err(_err) => { println!("ERROR HANDLING CLIENT {}", _err); return Err(Box::new(_err)); } // return early if accept fails, nothing to do
-        };
+    // Sequential message passing with client
+    let mut filename_to_write = common::verify_filename(conn.read_into_string().await?)?;
+    info!(
+        "{} wants to send us this file: {}",
+        peer_addr, filename_to_write
+    );
+    filename_to_write = common::format_filename(&peer_addr.ip().to_string(), &filename_to_write);
 
-        println!("Connected via TLS to {}", peer_addr);
+    conn.write_message_from_string(String::from("OK")).await?;
 
-        let dst = String::new();
-        // let mut buf:Vec<u8> = Vec::with_capacity(4096);
-        let mut buf = [0;4096];
-        // let n = tls_stream.read_buf(&mut buf).await?;
-        let n = tls_stream.read(&mut buf).await?;
-        println!("Read {} bytes from client", n);
-        // tls_stream.read(&mut buf).await?;
-        // tls_stream.read_to_string(&mut dst).await?;
-        
-        let string = String::from_utf8(buf.to_vec())?;
-        println!("Received msg: {}", string);
+    let mut absfilepath = server_args.backup_dir.clone();
+    absfilepath.push_str(&filename_to_write);
+    info!("Reading data from {} into {}", peer_addr, absfilepath);
+    conn.read_to_file(absfilepath).await?;
 
-        tls_stream.write_all(string.as_bytes()).await?;
-        tls_stream.shutdown().await?;
-
-        // echo server for now
-        // let (mut reader, mut writer) = split(tls_stream);
-        // let n = copy(&mut reader, &mut writer).await?;
-        // writer.flush().await?;
-        // println!("Echo: {} - {}", peer_addr, n);
-        Ok(())
+    info!("{} file transfer complete. Connection closed.", peer_addr);
+    Ok(())
 }

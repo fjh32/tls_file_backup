@@ -1,0 +1,13 @@
+#Put me in /lib/systemd/system/
+[Unit]
+Description=File Backup Service
+After=network.target
+
+[Service]
+Type=simple
+User=frank
+ExecStart=/home/frank/.local/bin/file_backup_server.sh
+Restart=always # or always, on-abort, etc
+
+[Install]
+WantedBy=multi-user.target

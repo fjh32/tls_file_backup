@@ -1,3 +1,6 @@
 /target
 *vscode*
 certs/*
+test_files/*
+certs*
+mkcert*
