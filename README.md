@@ -32,7 +32,7 @@ Tested on RPI, Mac OS, and Linux x86_64
 ## Running the exes (devel - non release)
 `cargo run --bin server -- --ip "0.0.0.0" --port 4545 --cert "<absolute_path_to_cert_file>" --key "<absolute_path_to_key_file>" --backup-dir <dir_to_put_archives>`
 
-`cargo run --bin client -- --ip "<server_ip_hostname_certdomain>" --port 4545 --file <absolute_path_of_file_to_send>`
+`cargo run --bin client -- --host "<server_ip_hostname_certdomain>" --port 4545 --file <absolute_path_of_file_to_send>`
 
 ## Personal notes
 ### How certs and client-validation of certs works

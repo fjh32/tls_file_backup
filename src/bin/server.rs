@@ -85,7 +85,7 @@ async fn main() -> io::Result<()> {
     let certs = load_certs(args.cert.clone()).await?;
     let key = load_keys(args.key.clone()).await?;
 
-    let config = rustls::ServerConfig::builder()
+    let config = tokio_rustls::rustls::ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(certs, key)
         .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;

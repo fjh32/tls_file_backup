@@ -40,7 +40,7 @@ async fn main() -> io::Result<()> {
         .next()
         .ok_or_else(|| io::Error::from(io::ErrorKind::AddrNotAvailable))?;
 
-    let mut root_cert_store = rustls::RootCertStore::empty();
+    let mut root_cert_store = tokio_rustls::rustls::RootCertStore::empty();
     let certlist = tokio::task::spawn_blocking(|| {
         rustls_native_certs::load_native_certs().expect("Could not load platform certs")
     })
@@ -51,7 +51,7 @@ async fn main() -> io::Result<()> {
     root_cert_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned()); // maybe make this async
 
     let ip_addr = ServerName::try_from(args.host).unwrap();
-    let config = rustls::ClientConfig::builder()
+    let config = tokio_rustls::rustls::ClientConfig::builder()
         .with_root_certificates(root_cert_store)
         .with_no_client_auth();
     let tls_connector = TlsConnector::from(Arc::new(config));
