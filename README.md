@@ -17,7 +17,7 @@ In public environment, use certificates from letsencrypt on server.
 
 # After you're sure you have working certs;
 # Running the .exe's (see releases)
-- Note: Only compiled for linux x86_64. Can supply .exe's for more.
+- Releases are available for Linux x86_64, Linux aarch64 (arm64), Mac OSX Ventura
 - Note: Client only works if the server is using a valid cert signed by a CA like LetsEncrypt. Client uses default system root store.
 - Note: Server supplies valid cert/key pair. Get one from certbot.
 - Note: Server and client both use port 4545 (make sure the server:4545 is accessible for the client).
