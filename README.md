@@ -34,6 +34,9 @@ Tested on RPI, Mac OS, and Linux x86_64
 
 `cargo run --bin client -- --host "<server_ip_hostname_certdomain>" --port 4545 --file <absolute_path_of_file_to_send>`
 
+## PLANS
+Client needs to be able to request a file from the server. this shit is so fast.
+
 ## Personal notes
 ### How certs and client-validation of certs works
 certificate authority (CA) signs a certificate (Csa) with its own CRT (CaCrt), producing End entity cert Ce.
